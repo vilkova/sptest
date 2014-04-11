@@ -8,7 +8,7 @@ import pickle
 from datetime import datetime
 
 AUTH_TOKEN = 'gmgPdqznEbntQRCrt3Wu'
-CACHE_DIR = 'cache-data/'
+CACHE_DIR = "cache-data/"
 
 def main():
     if not os.path.exists(CACHE_DIR):
@@ -37,15 +37,15 @@ def loadSpreadMatrix(filename):
                 value = cell.value
                 if value is None:
                     value = ''
-                if not isinstance(value, unicode):
-                    value = unicode(value)
+                if not isinstance(value, str):
+                    value = str(value)
                 value = value.encode('utf8')
                 table_row.insert(len(table_row), value)
             table.insert(len(table), table_row)
     return table
 
 def getSpreadDelta(row):
-    spread = loadQuandlSpread(row[0], row[1], row[2], int(row[5][:4]), int(row[6][:4]), int(row[3]), int(row[4]), row[5], row[6], int(row[7]), True)
+    spread = loadQuandlSpread(row[0].decode("utf-8"), row[1].decode("utf-8"), row[2].decode("utf-8"), int(row[5][:4].decode("utf-8")), int(row[6][:4].decode("utf-8")), int(row[3].decode("utf-8")), int(row[4].decode("utf-8")), row[5].decode("utf-8"), row[6].decode("utf-8"), int(row[7].decode("utf-8")), True)
     return convertSpreadSeriesToDelta(spread)
 
 def loadQuandlSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_DATE, END_DATE, BUCK_PRICE, STARTFROMZERO):
@@ -53,6 +53,7 @@ def loadQuandlSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2
     price = str(BUCK_PRICE)
     filename = CONTRACT + M1 + M2 + year + ST_DATE + END_DATE + price 
     filename = re.sub('[/ ]', '_', filename)
+    filename = re.sub('[:]', '.', filename)
     if len(sys.argv) == 2:
         years = [2000, 2000]
     else:
@@ -69,12 +70,11 @@ def loadQuandlSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2
     return spread
 
 def checkIfCached(filename):
-    isCached = False
     fileNames = os.listdir(CACHE_DIR)
     for fileName in fileNames:
-        if filename == fileName:
-            isCached = True
-    return isCached
+        if fileName == filename:
+            return True
+    return False
 
 def readCacheFromFile(filename):
     cacheFile = open(CACHE_DIR + filename, "rb")
@@ -83,10 +83,10 @@ def readCacheFromFile(filename):
     return cache
 
 def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_DATE, END_DATE, BUCK_PRICE, STARTFROMZERO, years, filename):
-    cont1 = CONTRACT + M1 + str(ST_YEAR + CONT_YEAR1)
-    cont2 = CONTRACT + M2 + str(END_YEAR + CONT_YEAR2)
-    print("contract1: " + cont1)
-    print("contract2: " + cont2)
+    cont1 = str(CONTRACT) + str(M1) + str(ST_YEAR + CONT_YEAR1)
+    cont2 = str(CONTRACT) + str(M2) + str(ST_YEAR + CONT_YEAR2)
+    print ("contract1: " + cont1)
+    print ("contract2: " + cont2)
     startdate = datetime.strptime(ST_DATE, '%Y-%m-%d %H:%M:%S')
     enddate = datetime.strptime(END_DATE, '%Y-%m-%d %H:%M:%S')
     for i in years:
@@ -105,6 +105,9 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
     return spread
 
 def writeCacheToFile(filename, spread, years):
+    print(type(filename))
+    print(CACHE_DIR+filename)
+    print(type(CACHE_DIR))
     cacheFile = open(CACHE_DIR + filename, 'wb')
     pickle.dump({
         'years': years,
