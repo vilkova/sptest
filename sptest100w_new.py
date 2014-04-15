@@ -8,6 +8,7 @@ import pickle
 from datetime import datetime
 import matplotlib.ticker as ticker
 import numpy as np
+import pandas as pd
 
 AUTH_TOKEN = 'e6FuWkfWH9qypKzJz6sR'
 CACHE_DIR = "cache-data/"
@@ -17,16 +18,25 @@ def main():
         os.makedirs(CACHE_DIR)
     table = loadSpreadMatrix(sys.argv[1])
     spread1Delta = getSpreadDelta(table[1])
-    spread2Delta = getSpreadDelta(table[2])
-    totalSpreadDelta = spread1Delta.add(spread2Delta, fill_value = 0)
-    for i in range(0, 3):
-        del table[0]
-    for row in table:
-        totalSpreadDelta = totalSpreadDelta.add(getSpreadDelta(row), fill_value = 0)
-    totalCumulativeChart = convertDeltaSeriesToCumulativeGraph(totalSpreadDelta)
-    print("Total Cumulative Chart:")
-    print(totalCumulativeChart.astype(int))
-    showPlot(totalCumulativeChart)
+
+    if len(table) == 2:
+        totalSpreadDelta = spread1Delta.add(spread1Delta)
+        totalCumulativeChart = convertDeltaSeriesToCumulativeGraph(totalSpreadDelta)
+        print("Total Cumulative Chart:")
+        print(totalCumulativeChart.astype(int))
+        showPlot(totalCumulativeChart)
+    
+    else:  
+        spread2Delta = getSpreadDelta(table[2])
+        totalSpreadDelta = spread1Delta.add(spread2Delta, fill_value = 0)
+        for i in range(0, 3):
+            del table[0]
+        for row in table:
+            totalSpreadDelta = totalSpreadDelta.add(getSpreadDelta(row), fill_value = 0)
+        totalCumulativeChart = convertDeltaSeriesToCumulativeGraph(totalSpreadDelta)
+        print("Total Cumulative Chart:")
+        print(totalCumulativeChart.astype(int))
+        showPlot(totalCumulativeChart)
 
 def loadSpreadMatrix(filename):
     wb = load_workbook(filename)
@@ -87,6 +97,7 @@ def readCacheFromFile(filename):
 def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_DATE, END_DATE, BUCK_PRICE, STARTFROMZERO, years, filename):
     startdate = datetime.strptime(ST_DATE, '%Y-%m-%d %H:%M:%S')
     enddate = datetime.strptime(END_DATE, '%Y-%m-%d %H:%M:%S')
+    totalSpread = pd.Series()
     for i in years:
         year = str(i)
         price = str(BUCK_PRICE)
@@ -108,19 +119,21 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
         print(startDate.strftime('%Y-%m-%d')) 
         print('Trim end:')   
         print(endDate.strftime('%Y-%m-%d'))   
-        print('==============')        
+        print('==============')
 
         data1 = q.get(cont1, authtoken = AUTH_TOKEN, trim_start = startDate, trim_end = endDate)
         data2 = q.get(cont2, authtoken = AUTH_TOKEN, trim_start = startDate, trim_end = endDate)
         spread = (data1 - data2).Settle * BUCK_PRICE
+        
         if STARTFROMZERO:
             if spread.size > 0:
                 spread = spread - spread[0]
-                writeCacheToFile(filename, spread, years)
+                totalSpread = totalSpread.append(spread)
+                writeCacheToFile(filename, totalSpread, years)
             else:
                 print('There is no data for %s' %startdate)
                 sys.exit(-1)
-    return spread
+    return totalSpread
 
 def writeCacheToFile(filename, spread, years):
     cacheFile = open(CACHE_DIR + filename, 'wb')
@@ -141,14 +154,11 @@ def convertSpreadSeriesToDelta(DATA):
 
 def convertDeltaSeriesToCumulativeGraph(DATA):
     GRAPHDATA = DATA.copy(True)
-    previ = DATA.index[0]
-    for i in DATA.index:
-        if DATA.index[0] == i:
-            GRAPHDATA.ix[i] = DATA.ix[i]
-            previ = i
-        else:
-            GRAPHDATA.ix[i] = GRAPHDATA.ix[previ] + DATA.ix[i]
-            previ = i
+    prev_date = DATA.index[0]
+    for i in range(1, len(DATA.index)):
+        date = DATA.index[i]
+        GRAPHDATA.ix[date] = GRAPHDATA.ix[prev_date] + DATA.ix[date]
+        prev_date = date
     return GRAPHDATA
 
 def showPlot(totalCumulativeChart):
