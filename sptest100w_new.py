@@ -6,8 +6,10 @@ import sys
 import re
 import pickle
 from datetime import datetime
+import matplotlib.ticker as ticker
+import numpy as np
 
-AUTH_TOKEN = 'gmgPdqznEbntQRCrt3Wu'
+AUTH_TOKEN = 'e6FuWkfWH9qypKzJz6sR'
 CACHE_DIR = "cache-data/"
 
 def main():
@@ -24,8 +26,7 @@ def main():
     totalCumulativeChart = convertDeltaSeriesToCumulativeGraph(totalSpreadDelta)
     print("Total Cumulative Chart:")
     print(totalCumulativeChart.astype(int))
-    plt.plot(totalCumulativeChart.index, totalCumulativeChart)
-    plt.show()
+    showPlot(totalCumulativeChart)
 
 def loadSpreadMatrix(filename):
     wb = load_workbook(filename)
@@ -55,7 +56,7 @@ def loadQuandlSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2
     filename = re.sub('[/ ]', '_', filename)
     filename = re.sub('[:]', '.', filename)
     if len(sys.argv) == 2:
-        years = [2000, 2000]
+        years = [2000]
     else:
         years = range(int(sys.argv[2]), int(sys.argv[3]) + 1)
     if checkIfCached(filename):
@@ -67,6 +68,7 @@ def loadQuandlSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2
             spread = fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_DATE, END_DATE, BUCK_PRICE, STARTFROMZERO, years, filename)
     else:
         spread = fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_DATE, END_DATE, BUCK_PRICE, STARTFROMZERO, years, filename)
+        print (spread)
     return spread
 
 def checkIfCached(filename):
@@ -83,31 +85,44 @@ def readCacheFromFile(filename):
     return cache
 
 def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_DATE, END_DATE, BUCK_PRICE, STARTFROMZERO, years, filename):
-    cont1 = str(CONTRACT) + str(M1) + str(ST_YEAR + CONT_YEAR1)
-    cont2 = str(CONTRACT) + str(M2) + str(ST_YEAR + CONT_YEAR2)
-    print ("contract1: " + cont1)
-    print ("contract2: " + cont2)
     startdate = datetime.strptime(ST_DATE, '%Y-%m-%d %H:%M:%S')
     enddate = datetime.strptime(END_DATE, '%Y-%m-%d %H:%M:%S')
     for i in years:
+        year = str(i)
+        price = str(BUCK_PRICE)
+        filename = CONTRACT + M1 + M2 + year + ST_DATE + END_DATE + price 
+        filename = re.sub('[/ ]', '_', filename)
+        filename = re.sub('[:]', '.', filename)
+
+        cont1 = str(CONTRACT) + str(M1) + str(i + CONT_YEAR1)
+        cont2 = str(CONTRACT) + str(M2) + str(i + CONT_YEAR2)
+
+        print ("contract1: " + cont1)
+        print ("contract2: " + cont2)
+
         startDate = startdate.replace(year = ST_YEAR - 2000 + i)
         endDate = enddate.replace(year = END_YEAR - 2000 + i)
+
+        print('==============')  
+        print('Trim start:')    
+        print(startDate.strftime('%Y-%m-%d')) 
+        print('Trim end:')   
+        print(endDate.strftime('%Y-%m-%d'))   
+        print('==============')        
+
         data1 = q.get(cont1, authtoken = AUTH_TOKEN, trim_start = startDate, trim_end = endDate)
         data2 = q.get(cont2, authtoken = AUTH_TOKEN, trim_start = startDate, trim_end = endDate)
         spread = (data1 - data2).Settle * BUCK_PRICE
-    if STARTFROMZERO:
-        if spread.size > 0:
-            spread = spread - spread[0]
-            writeCacheToFile(filename, spread, years)
-        else:
-            print('There is no data for adjusted years.')
-            sys.exit(-1)
+        if STARTFROMZERO:
+            if spread.size > 0:
+                spread = spread - spread[0]
+                writeCacheToFile(filename, spread, years)
+            else:
+                print('There is no data for %s' %startdate)
+                sys.exit(-1)
     return spread
 
 def writeCacheToFile(filename, spread, years):
-    print(type(filename))
-    print(CACHE_DIR+filename)
-    print(type(CACHE_DIR))
     cacheFile = open(CACHE_DIR + filename, 'wb')
     pickle.dump({
         'years': years,
@@ -135,6 +150,27 @@ def convertDeltaSeriesToCumulativeGraph(DATA):
             GRAPHDATA.ix[i] = GRAPHDATA.ix[previ] + DATA.ix[i]
             previ = i
     return GRAPHDATA
+
+def showPlot(totalCumulativeChart):
+    def format_date(x, pos=None):
+        thisind = np.clip(int(x+0.5), 0, N-1)
+        return totalCumulativeChart.index[thisind].strftime('%b %Y')
+
+    N = len(totalCumulativeChart)
+    ind = np.arange(N)    
+
+    #shows plot with empty data intervals    
+    # fig, ax = plt.subplots()
+    # ax.plot(totalCumulativeChart.index, totalCumulativeChart)
+    # fig.autofmt_xdate()
+
+    #shows plot without empty data intervals
+    fig, ax = plt.subplots()
+    ax.plot(ind, totalCumulativeChart)
+    ax.xaxis.set_major_formatter(ticker.FuncFormatter(format_date))
+    fig.autofmt_xdate() 
+
+    plt.show()     
 
 
 main()
