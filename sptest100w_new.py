@@ -110,32 +110,20 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
             data1 = q.get(cont1, authtoken = AUTH_TOKEN, trim_start = startDate, trim_end = endDate)
             data2 = q.get(cont2, authtoken = AUTH_TOKEN, trim_start = startDate, trim_end = endDate)
             spread = (data1 - data2).Settle * BUCK_PRICE
-
-
+            writeCacheToFile(filename, spread, years)
         else:
             print("Loading cached data from file: %s !" %filename)
             cache = readCacheFromFile(filename)
-            if years == cache['years']:
-                spread = cache['spread']
-
+            spread = cache['spread']
         if STARTFROMZERO:
             if spread.size > 0:
                 delta = lastValue - spread[0]
                 spread = spread + delta
                 totalSpread = totalSpread.append(spread)
                 lastValue = totalSpread[-1]
-                
-                print('11111111§1111')
-                print(spread[0])        
-                print(lastValue)
-                print('11111111§1111')
-
-                writeCacheToFile(filename, totalSpread, years)
             else:
                 print('There is no data for %s' %startdate)
                 sys.exit(-1)
-        # totalSpread = totalSpread.append(spread)
-                    
     return totalSpread
 
 
