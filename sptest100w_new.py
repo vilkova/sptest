@@ -25,8 +25,8 @@ def main():
         print("Total Cumulative Chart:")
         print(totalCumulativeChart.astype(int))
         showPlot(totalCumulativeChart)
-    
-    else:  
+
+    else:
         spread2Delta = getSpreadDelta(table[2])
         totalSpreadDelta = spread1Delta.add(spread2Delta, fill_value = 0)
         for i in range(0, 3):
@@ -62,7 +62,7 @@ def getSpreadDelta(row):
 def loadQuandlSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_DATE, END_DATE, BUCK_PRICE, STARTFROMZERO):
     year = str(ST_YEAR)
     price = str(BUCK_PRICE)
-    filename = CONTRACT + M1 + M2 + year + ST_DATE + END_DATE + price 
+    filename = CONTRACT + M1 + M2 + year + ST_DATE + END_DATE + price
     filename = re.sub('[/ ]', '_', filename)
     filename = re.sub('[:]', '.', filename)
     if len(sys.argv) == 2:
@@ -98,37 +98,38 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
     startdate = datetime.strptime(ST_DATE, '%Y-%m-%d %H:%M:%S')
     enddate = datetime.strptime(END_DATE, '%Y-%m-%d %H:%M:%S')
     totalSpread = pd.Series()
+    lastValue = 0
     for i in years:
         year = str(i)
         price = str(BUCK_PRICE)
-        filename = CONTRACT + M1 + M2 + year + ST_DATE + END_DATE + price 
+        filename = CONTRACT + M1 + M2 + year + ST_DATE + END_DATE + price
         filename = re.sub('[/ ]', '_', filename)
         filename = re.sub('[:]', '.', filename)
-
         cont1 = str(CONTRACT) + str(M1) + str(i + CONT_YEAR1)
         cont2 = str(CONTRACT) + str(M2) + str(i + CONT_YEAR2)
-
         print ("contract1: " + cont1)
         print ("contract2: " + cont2)
 
         startDate = startdate.replace(year = ST_YEAR - 2000 + i)
         endDate = enddate.replace(year = END_YEAR - 2000 + i)
 
-        print('==============')  
-        print('Trim start:')    
-        print(startDate.strftime('%Y-%m-%d')) 
-        print('Trim end:')   
-        print(endDate.strftime('%Y-%m-%d'))   
+        print('==============')
+        print('Trim start:')
+        print(startDate.strftime('%Y-%m-%d'))
+        print('Trim end:')
+        print(endDate.strftime('%Y-%m-%d'))
         print('==============')
 
         data1 = q.get(cont1, authtoken = AUTH_TOKEN, trim_start = startDate, trim_end = endDate)
         data2 = q.get(cont2, authtoken = AUTH_TOKEN, trim_start = startDate, trim_end = endDate)
         spread = (data1 - data2).Settle * BUCK_PRICE
-        
+
         if STARTFROMZERO:
             if spread.size > 0:
-                spread = spread - spread[0]
+                delta = lastValue - spread[0]
+                spread = spread + delta
                 totalSpread = totalSpread.append(spread)
+                lastValue = totalSpread[-1]
                 writeCacheToFile(filename, totalSpread, years)
             else:
                 print('There is no data for %s' %startdate)
@@ -167,7 +168,7 @@ def showPlot(totalCumulativeChart):
         return totalCumulativeChart.index[thisind].strftime('%b %Y')
 
     N = len(totalCumulativeChart)
-    ind = np.arange(N)    
+    ind = np.arange(N)
 
     #shows plot with empty data intervals    
     # fig, ax = plt.subplots()
@@ -178,9 +179,9 @@ def showPlot(totalCumulativeChart):
     fig, ax = plt.subplots()
     ax.plot(ind, totalCumulativeChart)
     ax.xaxis.set_major_formatter(ticker.FuncFormatter(format_date))
-    fig.autofmt_xdate() 
+    fig.autofmt_xdate()
 
-    plt.show()     
+    plt.show()
 
 
 main()
