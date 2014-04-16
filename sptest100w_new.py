@@ -56,30 +56,15 @@ def loadSpreadMatrix(filename):
     return table
 
 def getSpreadDelta(row):
-    spread = loadQuandlSpread(row[0].decode("utf-8"), row[1].decode("utf-8"), row[2].decode("utf-8"), int(row[5][:4].decode("utf-8")), int(row[6][:4].decode("utf-8")), int(row[3].decode("utf-8")), int(row[4].decode("utf-8")), row[5].decode("utf-8"), row[6].decode("utf-8"), int(row[7].decode("utf-8")), True)
-    return convertSpreadSeriesToDelta(spread)
-
-def loadQuandlSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_DATE, END_DATE, BUCK_PRICE, STARTFROMZERO):
-    year = str(ST_YEAR)
-    price = str(BUCK_PRICE)
-    filename = CONTRACT + M1 + M2 + year + ST_DATE + END_DATE + price
-    filename = re.sub('[/ ]', '_', filename)
-    filename = re.sub('[:]', '.', filename)
     if len(sys.argv) == 2:
         years = [2000]
     else:
         years = range(int(sys.argv[2]), int(sys.argv[3]) + 1)
-    if checkIfCached(filename):
-        print("Loading cached data from file: %s !" %filename)
-        cache = readCacheFromFile(filename)
-        if years == cache['years']:
-            spread = cache['spread']
-        else:
-            spread = fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_DATE, END_DATE, BUCK_PRICE, STARTFROMZERO, years, filename)
-    else:
-        spread = fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_DATE, END_DATE, BUCK_PRICE, STARTFROMZERO, years, filename)
-        print (spread)
-    return spread
+
+    spread = fetchSpread(row[0].decode("utf-8"), row[1].decode("utf-8"), row[2].decode("utf-8"), int(row[5][:4].decode("utf-8")),
+                              int(row[6][:4].decode("utf-8")), int(row[3].decode("utf-8")), int(row[4].decode("utf-8")), row[5].decode("utf-8"),
+                              row[6].decode("utf-8"), int(row[7].decode("utf-8")), True, years)
+    return convertSpreadSeriesToDelta(spread)
 
 def checkIfCached(filename):
     fileNames = os.listdir(CACHE_DIR)
@@ -94,11 +79,12 @@ def readCacheFromFile(filename):
     cacheFile.close()
     return cache
 
-def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_DATE, END_DATE, BUCK_PRICE, STARTFROMZERO, years, filename):
+def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_DATE, END_DATE, BUCK_PRICE, STARTFROMZERO, years):
     startdate = datetime.strptime(ST_DATE, '%Y-%m-%d %H:%M:%S')
     enddate = datetime.strptime(END_DATE, '%Y-%m-%d %H:%M:%S')
     totalSpread = pd.Series()
     lastValue = 0
+    spread = pd.Series()
     for i in years:
         year = str(i)
         price = str(BUCK_PRICE)
@@ -120,9 +106,17 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
         print(endDate.strftime('%Y-%m-%d'))
         print('==============')
 
-        data1 = q.get(cont1, authtoken = AUTH_TOKEN, trim_start = startDate, trim_end = endDate)
-        data2 = q.get(cont2, authtoken = AUTH_TOKEN, trim_start = startDate, trim_end = endDate)
-        spread = (data1 - data2).Settle * BUCK_PRICE
+        if not checkIfCached(filename):
+            data1 = q.get(cont1, authtoken = AUTH_TOKEN, trim_start = startDate, trim_end = endDate)
+            data2 = q.get(cont2, authtoken = AUTH_TOKEN, trim_start = startDate, trim_end = endDate)
+            spread = (data1 - data2).Settle * BUCK_PRICE
+
+
+        else:
+            print("Loading cached data from file: %s !" %filename)
+            cache = readCacheFromFile(filename)
+            if years == cache['years']:
+                spread = cache['spread']
 
         if STARTFROMZERO:
             if spread.size > 0:
@@ -130,11 +124,20 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
                 spread = spread + delta
                 totalSpread = totalSpread.append(spread)
                 lastValue = totalSpread[-1]
+                
+                print('11111111§1111')
+                print(spread[0])        
+                print(lastValue)
+                print('11111111§1111')
+
                 writeCacheToFile(filename, totalSpread, years)
             else:
                 print('There is no data for %s' %startdate)
                 sys.exit(-1)
+        # totalSpread = totalSpread.append(spread)
+                    
     return totalSpread
+
 
 def writeCacheToFile(filename, spread, years):
     cacheFile = open(CACHE_DIR + filename, 'wb')
