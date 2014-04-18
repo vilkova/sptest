@@ -10,6 +10,7 @@ import matplotlib.ticker as ticker
 import numpy as np
 import pandas as pd
 import math
+import xlsxwriter
 
 AUTH_TOKEN = 'e6FuWkfWH9qypKzJz6sR'
 CACHE_DIR = "cache-data/"
@@ -22,7 +23,6 @@ def main():
 
     if len(table) == 2:
         totalSpreadDelta = spread1Delta.add(spread1Delta)
-        convertDeltaAndShowPlot(totalSpreadDelta)
     else:
         spread2Delta = getSpreadDelta(table[2])
         totalSpreadDelta = spread1Delta.add(spread2Delta, fill_value = 0)
@@ -30,13 +30,7 @@ def main():
             del table[0]
         for row in table:
             totalSpreadDelta = totalSpreadDelta.add(getSpreadDelta(row), fill_value = 0)
-            convertDeltaAndShowPlot(totalSpreadDelta)
-
-def convertDeltaAndShowPlot(totalSpreadDelta):
-    totalCumulativeChart = convertDeltaSeriesToCumulativeGraph(totalSpreadDelta)
-    print("Total Cumulative Chart:")
-    print(totalCumulativeChart.astype(int))
-    showPlot(totalCumulativeChart)
+    convertDeltaAndShowPlot(totalSpreadDelta)
 
 def loadSpreadMatrix(filename):
     wb = load_workbook(filename)
@@ -60,7 +54,6 @@ def getSpreadDelta(row):
         years = [2000]
     else:
         years = range(int(sys.argv[2]), int(sys.argv[3]) + 1)
-
     spread = fetchSpread(row[0].decode("utf-8"), row[1].decode("utf-8"), row[2].decode("utf-8"), int(row[5][:4].decode("utf-8")), int(row[6][:4].decode("utf-8")), int(row[3].decode("utf-8")), int(row[4].decode("utf-8")), row[5].decode("utf-8"), row[6].decode("utf-8"), int(row[7].decode("utf-8")), True, years)
     return convertSpreadSeriesToDelta(spread)
 
@@ -110,11 +103,11 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
 
             #remove row with NAN value 
             # spread = spread.dropna()
-            writeCacheToFile(filename, spread, years)
+            writeCacheToFile(filename, spread)
         else:
             print("Loading cached data from file: %s !" %filename)
             cache = readCacheFromFile(filename)
-            spread = cache['spread']
+            spread = cache
         if STARTFROMZERO:
             if spread.size > 0:
                 delta = lastValue - spread[0]
@@ -127,12 +120,10 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
     return totalSpread
 
 
-def writeCacheToFile(filename, spread, years):
+def writeCacheToFile(filename, spread):
     try:
         cacheFile = open(CACHE_DIR + filename, 'wb')
-        pickle.dump({
-            'spread': spread
-        }, cacheFile)
+        pickle.dump(spread, cacheFile)
         cacheFile.close()
     except IOError:
         print ('Error: can\'t write data to %s' %(CACHE_DIR+filename))
@@ -155,6 +146,28 @@ def convertDeltaSeriesToCumulativeGraph(DATA):
         prev_date = date
     return GRAPHDATA
 
+def convertDeltaAndShowPlot(totalSpreadDelta):
+    totalCumulativeChart = convertDeltaSeriesToCumulativeGraph(totalSpreadDelta)
+    saveChartDataInFile(totalCumulativeChart)
+    print("Total Cumulative Chart:")
+    print(totalCumulativeChart.astype(int))
+    showPlot(totalCumulativeChart)
+
+def saveChartDataInFile(totalCumulativeChart):
+    workbook = xlsxwriter.Workbook('chart_array.xlsx')
+    worksheet = workbook.add_worksheet()
+    row = 0
+    col = 0
+    for index in (totalCumulativeChart.index):
+        date = datetime.strftime(index, '%Y-%m-%d')
+        worksheet.write_string(row, col, date)
+        row += 1
+    row = 0
+    for value in (totalCumulativeChart):
+        worksheet.write_number(row, col+1, int(value))
+        row += 1
+    workbook.close()
+
 def showPlot(totalCumulativeChart):
     def format_date(x, pos=None):
         thisind = np.clip(int(x+0.5), 0, N-1)
@@ -175,6 +188,5 @@ def showPlot(totalCumulativeChart):
     fig.autofmt_xdate()
 
     plt.show()
-
 
 main()
