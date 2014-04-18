@@ -3,3 +3,4 @@ cache-data/*
 spreadmatrix.xlsx
 test.py
 .idea
+.~lock.spreadmatrix.xlsx#

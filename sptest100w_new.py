@@ -9,6 +9,7 @@ from datetime import datetime
 import matplotlib.ticker as ticker
 import numpy as np
 import pandas as pd
+import math
 
 AUTH_TOKEN = 'e6FuWkfWH9qypKzJz6sR'
 CACHE_DIR = "cache-data/"
@@ -21,11 +22,7 @@ def main():
 
     if len(table) == 2:
         totalSpreadDelta = spread1Delta.add(spread1Delta)
-        totalCumulativeChart = convertDeltaSeriesToCumulativeGraph(totalSpreadDelta)
-        print("Total Cumulative Chart:")
-        print(totalCumulativeChart.astype(int))
-        showPlot(totalCumulativeChart)
-
+        convertDeltaAndShowPlot(totalSpreadDelta)
     else:
         spread2Delta = getSpreadDelta(table[2])
         totalSpreadDelta = spread1Delta.add(spread2Delta, fill_value = 0)
@@ -33,10 +30,13 @@ def main():
             del table[0]
         for row in table:
             totalSpreadDelta = totalSpreadDelta.add(getSpreadDelta(row), fill_value = 0)
-        totalCumulativeChart = convertDeltaSeriesToCumulativeGraph(totalSpreadDelta)
-        print("Total Cumulative Chart:")
-        print(totalCumulativeChart.astype(int))
-        showPlot(totalCumulativeChart)
+            convertDeltaAndShowPlot(totalSpreadDelta)
+
+def convertDeltaAndShowPlot(totalSpreadDelta):
+    totalCumulativeChart = convertDeltaSeriesToCumulativeGraph(totalSpreadDelta)
+    print("Total Cumulative Chart:")
+    print(totalCumulativeChart.astype(int))
+    showPlot(totalCumulativeChart)
 
 def loadSpreadMatrix(filename):
     wb = load_workbook(filename)
@@ -61,9 +61,7 @@ def getSpreadDelta(row):
     else:
         years = range(int(sys.argv[2]), int(sys.argv[3]) + 1)
 
-    spread = fetchSpread(row[0].decode("utf-8"), row[1].decode("utf-8"), row[2].decode("utf-8"), int(row[5][:4].decode("utf-8")),
-                              int(row[6][:4].decode("utf-8")), int(row[3].decode("utf-8")), int(row[4].decode("utf-8")), row[5].decode("utf-8"),
-                              row[6].decode("utf-8"), int(row[7].decode("utf-8")), True, years)
+    spread = fetchSpread(row[0].decode("utf-8"), row[1].decode("utf-8"), row[2].decode("utf-8"), int(row[5][:4].decode("utf-8")), int(row[6][:4].decode("utf-8")), int(row[3].decode("utf-8")), int(row[4].decode("utf-8")), row[5].decode("utf-8"), row[6].decode("utf-8"), int(row[7].decode("utf-8")), True, years)
     return convertSpreadSeriesToDelta(spread)
 
 def checkIfCached(filename):
@@ -84,7 +82,6 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
     enddate = datetime.strptime(END_DATE, '%Y-%m-%d %H:%M:%S')
     totalSpread = pd.Series()
     lastValue = 0
-    spread = pd.Series()
     for i in years:
         year = str(i)
         price = str(BUCK_PRICE)
@@ -96,19 +93,23 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
         print('==============')
         print ("contract1: " + cont1)
         print ("contract2: " + cont2)
-
         startDate = startdate.replace(year = ST_YEAR - 2000 + i)
         endDate = enddate.replace(year = END_YEAR - 2000 + i)
-
         print('==============')
         print('Trim start: ', startDate.strftime('%Y-%m-%d'))
         print('Trim end: ', endDate.strftime('%Y-%m-%d'))
         print('==============')
-
         if not checkIfCached(filename):
             data1 = q.get(cont1, authtoken = AUTH_TOKEN, trim_start = startDate, trim_end = endDate)
             data2 = q.get(cont2, authtoken = AUTH_TOKEN, trim_start = startDate, trim_end = endDate)
             spread = (data1 - data2).Settle * BUCK_PRICE
+            if math.isnan(spread[0]):
+                spread = spread.fillna(method = 'bfill')
+            #replace NaN value with a previous one    
+            spread = spread.fillna(method='pad')
+
+            #remove row with NAN value 
+            # spread = spread.dropna()
             writeCacheToFile(filename, spread, years)
         else:
             print("Loading cached data from file: %s !" %filename)
