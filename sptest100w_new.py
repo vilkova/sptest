@@ -93,6 +93,7 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
         filename = re.sub('[:]', '.', filename)
         cont1 = str(CONTRACT) + str(M1) + str(i + CONT_YEAR1)
         cont2 = str(CONTRACT) + str(M2) + str(i + CONT_YEAR2)
+        print('==============')
         print ("contract1: " + cont1)
         print ("contract2: " + cont2)
 
@@ -100,10 +101,8 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
         endDate = enddate.replace(year = END_YEAR - 2000 + i)
 
         print('==============')
-        print('Trim start:')
-        print(startDate.strftime('%Y-%m-%d'))
-        print('Trim end:')
-        print(endDate.strftime('%Y-%m-%d'))
+        print('Trim start: ', startDate.strftime('%Y-%m-%d'))
+        print('Trim end: ', endDate.strftime('%Y-%m-%d'))
         print('==============')
 
         if not checkIfCached(filename):
@@ -122,18 +121,20 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
                 totalSpread = totalSpread.append(spread)
                 lastValue = totalSpread[-1]
             else:
-                print('There is no data for %s' %startdate)
+                print('Spread is empty!')
                 sys.exit(-1)
     return totalSpread
 
 
 def writeCacheToFile(filename, spread, years):
-    cacheFile = open(CACHE_DIR + filename, 'wb')
-    pickle.dump({
-        'years': years,
-        'spread': spread
-    }, cacheFile)
-    cacheFile.close()
+    try:
+        cacheFile = open(CACHE_DIR + filename, 'wb')
+        pickle.dump({
+            'spread': spread
+        }, cacheFile)
+        cacheFile.close()
+    except IOError:
+        print ('Error: can\'t write data to %s' %(CACHE_DIR+filename))
 
 def convertSpreadSeriesToDelta(DATA):
     DATADELTA = DATA.copy(True)
