@@ -54,7 +54,10 @@ def getSpreadDelta(row):
         years = [2000]
     else:
         years = range(int(sys.argv[2]), int(sys.argv[3]) + 1)
-    spread = fetchSpread(row[0].decode("utf-8"), row[1].decode("utf-8"), row[2].decode("utf-8"), int(row[5][:4].decode("utf-8")), int(row[6][:4].decode("utf-8")), int(row[3].decode("utf-8")), int(row[4].decode("utf-8")), row[5].decode("utf-8"), row[6].decode("utf-8"), int(row[7].decode("utf-8")), True, years)
+    if len(sys.argv) == 5:
+        spread = fetchSpread(sys.argv[4], row[1].decode("utf-8"), row[2].decode("utf-8"), int(row[5][:4].decode("utf-8")), int(row[6][:4].decode("utf-8")), int(row[3].decode("utf-8")), int(row[4].decode("utf-8")), row[5].decode("utf-8"), row[6].decode("utf-8"), int(row[7].decode("utf-8")), True, years)
+    else:
+        spread = fetchSpread(row[0].decode("utf-8"), row[1].decode("utf-8"), row[2].decode("utf-8"), int(row[5][:4].decode("utf-8")), int(row[6][:4].decode("utf-8")), int(row[3].decode("utf-8")), int(row[4].decode("utf-8")), row[5].decode("utf-8"), row[6].decode("utf-8"), int(row[7].decode("utf-8")), True, years)
     return convertSpreadSeriesToDelta(spread)
 
 def checkIfCached(filename):
