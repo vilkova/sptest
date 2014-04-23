@@ -97,9 +97,9 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
             data2 = q.get(cont2, authtoken = AUTH_TOKEN, trim_start = startDate, trim_end = endDate)
             spread = (data1 - data2).Settle * BUCK_PRICE
             if spread.size == 0:
-                print('!!!!!!!!!!!!')
-                print('No data available for contracts %s, %s. Skiping this years.' %(cont1, cont2))
-                print('!!!!!!!!!!!!')
+                print('!!!!!!!!!!!!*****WARNING****!!!!!!!!!!!!')
+                print('No data available for contracts %s, %s. Skiping period from %s to %s.' %(cont1, cont2, startDate.strftime('%Y-%m-%d'), endDate.strftime('%Y-%m-%d')))
+                print('!!!!!!!!!!!!*****WARNING****!!!!!!!!!!!!')
                 continue
             else:
                 if math.isnan(spread[0]):
@@ -115,14 +115,12 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
             cache = readCacheFromFile(filename)
             spread = cache
         if STARTFROMZERO:
-            if spread.size > 0:
                 delta = lastValue - spread[0]
                 spread = spread + delta
                 totalSpread = totalSpread.append(spread)
                 lastValue = totalSpread[-1]
-            else:
-                print('Spread is empty!')
-                sys.exit(-1)
+    if totalSpread.size == 0:
+        sys.exit(-1)
     return totalSpread
 
 def writeCacheToFile(filename, spread):
