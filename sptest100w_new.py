@@ -98,7 +98,7 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
             spread = (data1 - data2).Settle * BUCK_PRICE
             if spread.size == 0:
                 print('!!!!!!!!!!!!')
-                print('No data available for contracts: ', cont1, ' ', cont2, '. Skip this years.')
+                print('No data available for contracts %s, %s. Skiping this years.' %(cont1, cont2))
                 print('!!!!!!!!!!!!')
                 continue
             else:
