@@ -96,14 +96,20 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
             data1 = q.get(cont1, authtoken = AUTH_TOKEN, trim_start = startDate, trim_end = endDate)
             data2 = q.get(cont2, authtoken = AUTH_TOKEN, trim_start = startDate, trim_end = endDate)
             spread = (data1 - data2).Settle * BUCK_PRICE
-            if math.isnan(spread[0]):
-                spread = spread.fillna(method = 'bfill')
-            #replace NaN value with a previous one    
-            spread = spread.fillna(method='pad')
+            if spread.size == 0:
+                print('!!!!!!!!!!!!')
+                print('No data available for contracts: ', cont1, ' ', cont2, '. Skip this years.')
+                print('!!!!!!!!!!!!')
+                continue
+            else:
+                if math.isnan(spread[0]):
+                    spread = spread.fillna(method = 'bfill')
+                #replace NaN value with a previous one
+                spread = spread.fillna(method='pad')
 
-            #remove row with NAN value 
-            # spread = spread.dropna()
-            writeCacheToFile(filename, spread)
+                #remove row with NAN value
+                # spread = spread.dropna()
+                writeCacheToFile(filename, spread)
         else:
             print("Loading cached data from file: %s !" %filename)
             cache = readCacheFromFile(filename)
@@ -206,7 +212,7 @@ def showPlot(totalCumulativeChart):
     ax.xaxis.set_major_formatter(ticker.FuncFormatter(format_date))
     fig.autofmt_xdate()
     ax.yaxis.grid()
-    plt.xticks(np.arange(min(ind), max(ind), 20.0))
+    plt.xticks(np.arange(min(ind), max(ind), 15))
 
     plt.show()
 
