@@ -22,7 +22,7 @@ def main():
     spread1Delta = getSpreadDelta(table[1])
 
     if len(table) == 2:
-        totalSpreadDelta = spread1Delta.add(spread1Delta)
+        totalSpreadDelta = spread1Delta
     else:
         spread2Delta = getSpreadDelta(table[2])
         totalSpreadDelta = spread1Delta.add(spread2Delta, fill_value = 0)
@@ -119,7 +119,6 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
                 sys.exit(-1)
     return totalSpread
 
-
 def writeCacheToFile(filename, spread):
     try:
         cacheFile = open(CACHE_DIR + filename, 'wb')
@@ -156,22 +155,42 @@ def convertDeltaAndShowPlot(totalSpreadDelta):
 def saveChartDataInFile(totalCumulativeChart):
     workbook = xlsxwriter.Workbook('chart_array.xlsx')
     worksheet = workbook.add_worksheet()
+    chart = workbook.add_chart({'type': 'line'})
+    a = 0
+    b = 0
     row = 0
     col = 0
     for index in (totalCumulativeChart.index):
         date = datetime.strftime(index, '%Y-%m-%d')
         worksheet.write_string(row, col, date)
+        a += 1
         row += 1
     row = 0
     for value in (totalCumulativeChart):
         worksheet.write_number(row, col+1, int(value))
+        b += 1
         row += 1
+    chart.set_x_axis({
+        'date_axis': True
+    })
+    chart.add_series({
+        'values' : '=Sheet1!$B$1:$B$' + str(b),
+        'categories' : '=Sheet1!$A$1:$A$' + str(a)
+    })
+    chart.set_y_axis({
+        'major_gridlines': {
+            'visible': True,
+            'line': {'width': 1.25, 'dash_type': 'dash'}
+        }
+    })
+    chart.set_size({'width': 720, 'height': 570})
+    worksheet.insert_chart('C1', chart)
     workbook.close()
 
 def showPlot(totalCumulativeChart):
     def format_date(x, pos=None):
         thisind = np.clip(int(x+0.5), 0, N-1)
-        return totalCumulativeChart.index[thisind].strftime('%b %Y')
+        return totalCumulativeChart.index[thisind].strftime('%b %d %Y')
 
     N = len(totalCumulativeChart)
     ind = np.arange(N)
@@ -186,6 +205,8 @@ def showPlot(totalCumulativeChart):
     ax.plot(ind, totalCumulativeChart)
     ax.xaxis.set_major_formatter(ticker.FuncFormatter(format_date))
     fig.autofmt_xdate()
+    ax.yaxis.grid()
+    plt.xticks(np.arange(min(ind), max(ind), 20.0))
 
     plt.show()
 
