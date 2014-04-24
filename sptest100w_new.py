@@ -18,9 +18,8 @@ CACHE_DIR = "cache-data/"
 def main():
     if not os.path.exists(CACHE_DIR):
         os.makedirs(CACHE_DIR)
-    table = loadSpreadMatrix(sys.argv[1])
+    table = retrieveTableFromExcel()
     spread1Delta = getSpreadDelta(table[1])
-
     if len(table) == 2:
         totalSpreadDelta = spread1Delta
     else:
@@ -31,6 +30,18 @@ def main():
         for row in table:
             totalSpreadDelta = totalSpreadDelta.add(getSpreadDelta(row), fill_value = 0)
     convertDeltaAndShowPlot(totalSpreadDelta)
+
+def retrieveTableFromExcel():
+    table = loadSpreadMatrix(sys.argv[1])
+    rowsWithOneContract = []
+    if(len(sys.argv) == 5):
+        contract = sys.argv[4]
+        rowsWithOneContract.append(table[0])
+        for row in table:
+            if row[0].decode('utf-8') == contract:
+                rowsWithOneContract.append(row)
+        table = rowsWithOneContract
+    return table
 
 def loadSpreadMatrix(filename):
     wb = load_workbook(filename)
@@ -54,10 +65,7 @@ def getSpreadDelta(row):
         years = [2000]
     else:
         years = range(int(sys.argv[2]), int(sys.argv[3]) + 1)
-    if len(sys.argv) == 5:
-        spread = fetchSpread(sys.argv[4], row[1].decode("utf-8"), row[2].decode("utf-8"), int(row[5][:4].decode("utf-8")), int(row[6][:4].decode("utf-8")), int(row[3].decode("utf-8")), int(row[4].decode("utf-8")), row[5].decode("utf-8"), row[6].decode("utf-8"), int(row[7].decode("utf-8")), True, years)
-    else:
-        spread = fetchSpread(row[0].decode("utf-8"), row[1].decode("utf-8"), row[2].decode("utf-8"), int(row[5][:4].decode("utf-8")), int(row[6][:4].decode("utf-8")), int(row[3].decode("utf-8")), int(row[4].decode("utf-8")), row[5].decode("utf-8"), row[6].decode("utf-8"), int(row[7].decode("utf-8")), True, years)
+    spread = fetchSpread(row[0].decode("utf-8"), row[1].decode("utf-8"), row[2].decode("utf-8"), int(row[5][:4].decode("utf-8")), int(row[6][:4].decode("utf-8")), int(row[3].decode("utf-8")), int(row[4].decode("utf-8")), row[5].decode("utf-8"), row[6].decode("utf-8"), int(row[7].decode("utf-8")), True, years)
     return convertSpreadSeriesToDelta(spread)
 
 def checkIfCached(filename):
@@ -214,7 +222,6 @@ def showPlot(totalCumulativeChart):
     fig.autofmt_xdate()
     ax.yaxis.grid()
     plt.xticks(np.arange(min(ind), max(ind), 15))
-
     plt.show()
 
 main()
