@@ -1,4 +1,5 @@
 import Quandl as q
+from numpy import *
 import matplotlib.pyplot as plt
 from openpyxl.reader.excel import load_workbook
 import os
@@ -151,6 +152,19 @@ def convertSpreadSeriesToDelta(DATA):
             previ = i
     return DATADELTA
 
+def convertDeltaAndShowPlot(totalSpreadDelta):
+    totalCumulativeChart = convertDeltaSeriesToCumulativeGraph(totalSpreadDelta)
+    maxArray = findLocalMaxs(totalCumulativeChart)
+    minArray = findLocalMins(totalCumulativeChart)
+    drawdownArray = findMaxDrawdowns(maxArray, minArray)
+    print('================')
+    print('Maximum drawdowns: \n', drawdownArray)
+    print('================')
+    saveChartDataInFile(totalCumulativeChart)
+    print("Total Cumulative Chart:")
+    print(totalCumulativeChart.astype(int))
+    showPlot(totalCumulativeChart)
+
 def convertDeltaSeriesToCumulativeGraph(DATA):
     GRAPHDATA = DATA.copy(True)
     prev_date = DATA.index[0]
@@ -160,12 +174,74 @@ def convertDeltaSeriesToCumulativeGraph(DATA):
         prev_date = date
     return GRAPHDATA
 
-def convertDeltaAndShowPlot(totalSpreadDelta):
-    totalCumulativeChart = convertDeltaSeriesToCumulativeGraph(totalSpreadDelta)
-    saveChartDataInFile(totalCumulativeChart)
-    print("Total Cumulative Chart:")
-    print(totalCumulativeChart.astype(int))
-    showPlot(totalCumulativeChart)
+def findLocalMaxs(totalCumulativeChart):
+    maxSeriesArray = pd.Series()
+    for value in range(1, len(totalCumulativeChart)-1):
+        if totalCumulativeChart[value] > totalCumulativeChart[value - 1] and totalCumulativeChart[value] > totalCumulativeChart[value + 1]:
+            maxSeriesArray.set_value(totalCumulativeChart.index[value], totalCumulativeChart[value])
+    return maxSeriesArray
+
+def findLocalMins(totalCumulativeChart):
+    minSeriesArray = pd.Series()
+    for value in range(1, len(totalCumulativeChart)-1):
+        if totalCumulativeChart[value] < totalCumulativeChart[value - 1] and totalCumulativeChart[value] < totalCumulativeChart[value + 1]:
+            minSeriesArray.set_value(totalCumulativeChart.index[value], totalCumulativeChart[value])
+    return minSeriesArray
+
+def findMaxDrawdowns(maxArray, minArray):
+    drawdownArray = []
+    delta = 0
+    # keyLeft = datetime(1970,1,1)
+    # keyRight = datetime(1970,1,1)
+    for i in range(0, maxArray.size):
+        for j in range(0, minArray.size):
+            if maxArray.index[i] < minArray.index[j]:
+                if (maxArray[i] - minArray[j]) > delta:
+                    delta = maxArray[i] - minArray[j]
+                    keyLeft = maxArray.index[i]
+                    keyRight = minArray.index[j]
+                    drawdownArray.append((keyLeft, keyRight, -delta))
+    sortedDDArray = sorted(drawdownArray)[-5:]
+    saveSortedDDArray(sortedDDArray)
+    return sortedDDArray
+
+def saveSortedDDArray(sortedDDArray):
+    firstDate = []
+    secondDate = []
+    delta = []
+    for i in range(0, 5):
+        firstDate.append(sortedDDArray[i][0])
+        secondDate.append(sortedDDArray[i][1])
+        delta.append(sortedDDArray[i][2])
+    saveDrowDownInFile(firstDate, secondDate, delta)
+
+def saveDrowDownInFile(firstDate, secondDate, delta):
+    workbook = xlsxwriter.Workbook('drawdown_array.xlsx')
+    worksheet = workbook.add_worksheet()
+    chart = workbook.add_chart({'type': 'column'})
+    col = 0
+    row = 0
+    for date1 in firstDate:
+        dateLeft = datetime.strftime(date1, '%Y-%m-%d')
+        worksheet.write_string(row, col, dateLeft)
+        row += 1
+    row = 0
+    for date2 in secondDate:
+        dateRight = datetime.strftime(date2, '%Y-%m-%d')
+        worksheet.write_string(row, col+1, dateRight)
+        row += 1
+    row = 0
+    for d in delta:
+        worksheet.write_number(row, col+2, int(d))
+        row += 1
+
+    chart.add_series({
+        'values' : '=Sheet1!$C$1:$C$5',
+        'categories' : '=Sheet1!$A$1:$A$5'
+    })
+    chart.set_size({'width': 600, 'height': 470})
+    worksheet.insert_chart('D1', chart)
+    workbook.close()
 
 def saveChartDataInFile(totalCumulativeChart):
     workbook = xlsxwriter.Workbook('chart_array.xlsx')
@@ -220,6 +296,8 @@ def showPlot(totalCumulativeChart):
     ax.plot(ind, totalCumulativeChart)
     ax.xaxis.set_major_formatter(ticker.FuncFormatter(format_date))
     fig.autofmt_xdate()
+
+
     ax.yaxis.grid()
     plt.xticks(np.arange(min(ind), max(ind), 15))
     plt.show()
