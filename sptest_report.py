@@ -16,13 +16,14 @@ import xlsxwriter
 AUTH_TOKEN = 'e6FuWkfWH9qypKzJz6sR'
 CACHE_DIR = "cache-data/"
 REPORTS_DIR = "reports/"
+B = sys.argv[4]
 
 def main():
     if not os.path.exists(CACHE_DIR):
         os.makedirs(CACHE_DIR)
     if not os.path.exists(REPORTS_DIR):
         os.makedirs(REPORTS_DIR)
-    table = retrieveTableFromExcel()
+    table = loadSpreadMatrix(sys.argv[1])
     spread1Delta = getSpreadDelta(table[1])
     if len(table) == 2:
         totalSpreadDelta = spread1Delta
@@ -34,19 +35,6 @@ def main():
         for row in table:
             totalSpreadDelta = totalSpreadDelta.add(getSpreadDelta(row), fill_value=0)
     convertDeltaAndShowPlot(totalSpreadDelta)
-
-
-def retrieveTableFromExcel():
-    table = loadSpreadMatrix(sys.argv[1])
-    rowsWithOneContract = []
-    if(len(sys.argv) == 5):
-        contract = sys.argv[4]
-        rowsWithOneContract.append(table[0])
-        for row in table:
-            if row[0].decode('utf-8') == contract:
-                rowsWithOneContract.append(row)
-        table = rowsWithOneContract
-    return table
 
 
 def loadSpreadMatrix(filename):
@@ -171,11 +159,17 @@ def convertSpreadSeriesToDelta(DATA):
 
 def convertDeltaAndShowPlot(totalSpreadDelta):
     totalCumulativeChart = convertDeltaSeriesToCumulativeGraph(totalSpreadDelta)
+    saveChartDataInFile(totalCumulativeChart)
+
     drawdownArray = getMaxDrawdowns(totalCumulativeChart)
+    saveSortedDDArray(drawdownArray)
     print('================')
     print('Maximum drawdowns: \n', drawdownArray, '\n')
     print('================')
-    saveChartDataInFile(totalCumulativeChart)
+
+    yieldArray = getYieldArray(totalCumulativeChart)
+    saveYieldInFile(yieldArray)
+
     print("Total Cumulative Chart:")
     print(totalCumulativeChart.astype(int))
     showPlot(totalCumulativeChart)
@@ -196,7 +190,6 @@ def getMaxDrawdowns(totalCumulativeChart):
             drawdownArray.append((keyRight, keyLeft, totalCumulativeChart[keyRight], totalCumulativeChart[keyLeft]))
     dd = filterDrawdowns(drawdownArray)
     sortedDDArray = sorted(dd, key=lambda x: x[2])[-5:]
-    saveSortedDDArray(sortedDDArray)
     return sortedDDArray
 
 
@@ -218,6 +211,123 @@ def filterDrawdowns(dd):
             minValue = dd[i][3]
     return drawndowns
 
+
+def getYieldArray(chart):
+    yieldReport = []
+    monthlyReport = getMonthlyReport(chart)
+    yearlyReport = getYearlyReport(chart)
+    yieldReport.append((monthlyReport, yearlyReport))
+    return yieldReport
+
+def getMonthlyReport(chart):
+    monthlyReport = []
+    month = chart.index[0].strftime('%Y-%m')
+    KArray =[]
+    for i in range(1, len(chart)):
+        if chart.index[i].strftime('%Y-%m') > month:
+            if chart.index[i].strftime('%Y-%m') > chart.index[i-1].strftime('%Y-%m'):
+                KM = chart[i-1]
+                KArray.append((chart.index[i-1], KM))
+                month = chart.index[i].strftime('%Y-%m')
+    firstMonth = (int(KArray[0][1]) - chart[0])/int(B)
+    monthlyReport.append((chart.index[0], firstMonth))
+    for j in range(1, len(KArray)):
+        KM2 = KArray[j][1]
+        KM1 = KArray[j-1][1]
+        yieldValue = (int(KM2)-int(KM1))/int(B)
+        monthlyReport.append((KArray[j][0], yieldValue))
+    lastMonth = (chart[-1] - KM2)/int(B)
+    monthlyReport.append((chart.index[-1], lastMonth))
+    print('Monthly yield report: \n', monthlyReport, '\n')
+    print('================')
+    return monthlyReport
+
+def getYearlyReport(chart):
+    yearlyReport = []
+    year = chart.index[0].strftime('%Y')
+    KYearsArray = []
+    for q in range(1, len(chart)):
+        if chart.index[q].strftime('%Y') > year:
+            if chart.index[q].strftime('%Y') > chart.index[q-1].strftime('%Y'):
+                KY = chart[q-1]
+                KYearsArray.append((chart.index[q-1], KY))
+                year = chart.index[q].strftime('%Y-%m')
+    firstYear = (int(KYearsArray[0][1]) - chart[0])/int(B)
+    yearlyReport.append((chart.index[0], firstYear))
+    for w in range(1, len(KYearsArray)):
+        KY2 = KYearsArray[w][1]
+        KY1 = KYearsArray[w-1][1]
+        yearYieldValue = (int(KY2)-int(KY1))/int(B)
+        yearlyReport.append((KYearsArray[w][0], yearYieldValue))
+    lastYear = (chart[-1] - KY2)/int(B)
+    yearlyReport.append((chart.index[-1], lastYear))
+    print('Yearly yield report: \n', yearlyReport, '\n')
+    print('================')
+    return yearlyReport
+
+def saveYieldInFile(yieldArray):
+    m_dates = []
+    m_values = []
+    y_dates = []
+    y_values = []
+    workbook = xlsxwriter.Workbook(REPORTS_DIR + 'yield_array.xlsx')
+    worksheet1 = workbook.add_worksheet("Monthly Report")
+    worksheet2 = workbook.add_worksheet("Yearly Report")
+    chart1 = getMonthlyChart(workbook, worksheet1, m_dates, m_values, yieldArray)
+    chart2 = getYearlyChart(workbook, worksheet2, y_dates, y_values, yieldArray)
+    worksheet1.insert_chart('C1', chart1)
+    worksheet2.insert_chart('C1', chart2)
+    workbook.close()
+
+def getMonthlyChart(workbook, worksheet1, m_dates, m_values, yieldArray):
+    chart1 = workbook.add_chart({'type': 'column'})
+    for i in range(0, len(yieldArray[0][0])):
+        m_dates.append(yieldArray[0][0][i][0])
+        m_values.append(yieldArray[0][0][i][1])
+    col = 0
+    row = 0
+    am = 0
+    bm = 0
+    for date in m_dates:
+        worksheet1.write_string(row, col, datetime.strftime(date, '%Y-%m-%d'))
+        row += 1
+        am += 1
+    row = 0
+    for value in m_values:
+        worksheet1.write_number(row, col+1, value)
+        row += 1
+        bm += 1
+    chart1.add_series({
+        'values': '=Monthly Report!$B$1:$B$' + str(bm),
+        'categories': '=Monthly Report!$A$1:$A$' + str(am)
+    })
+    chart1.set_size({'width': 500, 'height': 370})
+    return chart1
+
+def getYearlyChart(workbook, worksheet2, y_dates, y_values, yieldArray):
+    chart2 = workbook.add_chart({'type': 'column'})
+    for j in range(0, len(yieldArray[0][1])):
+        y_dates.append(yieldArray[0][1][j][0])
+        y_values.append(yieldArray[0][1][j][1])
+    col = 0
+    row = 0
+    a = 0
+    b = 0
+    for date in y_dates:
+        worksheet2.write_string(row, col, datetime.strftime(date, '%Y-%m-%d'))
+        row += 1
+        a += 1
+    row = 0
+    for value in y_values:
+        worksheet2.write_number(row, col+1, value)
+        row += 1
+        b += 1
+    chart2.add_series({
+        'values': '=Yearly Report!$B$1:$B$' + str(b),
+        'categories': '=Yearly Report!$A$1:$A$' + str(a)
+    })
+    chart2.set_size({'width': 500, 'height': 370})
+    return chart2
 
 def convertDeltaSeriesToCumulativeGraph(DATA):
     GRAPHDATA = DATA.copy(True)
@@ -241,7 +351,7 @@ def saveSortedDDArray(sortedDDArray):
 
 
 def saveDrowDownInFile(firstDate, secondDate, delta):
-    workbook = xlsxwriter.Workbook(REPORTS_DIR + 'drawdown_array.xlsx')
+    workbook = xlsxwriter.Workbook(REPORTS_DIR+'drawdown_array.xlsx')
     worksheet = workbook.add_worksheet()
     chart = workbook.add_chart({'type': 'column'})
     col = 0
@@ -312,7 +422,7 @@ def showPlot(totalCumulativeChart):
     N = len(totalCumulativeChart)
     ind = np.arange(N)
 
-    #shows plot with empty data intervals    
+    #shows plot with empty data intervals
     # fig, ax = plt.subplots()
     # ax.plot(totalCumulativeChart.index, totalCumulativeChart)
     # fig.autofmt_xdate()

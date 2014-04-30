@@ -11,29 +11,26 @@ import matplotlib.ticker as ticker
 import numpy as np
 import pandas as pd
 import math
-import xlsxwriter
 
 AUTH_TOKEN = 'e6FuWkfWH9qypKzJz6sR'
 CACHE_DIR = "cache-data/"
-REPORTS_DIR = "reports/"
 
 def main():
     if not os.path.exists(CACHE_DIR):
         os.makedirs(CACHE_DIR)
-    if not os.path.exists(REPORTS_DIR):
-        os.makedirs(REPORTS_DIR)
     table = retrieveTableFromExcel()
     spread1Delta = getSpreadDelta(table[1])
+    convertDeltaAndShowPlot(spread1Delta)
     if len(table) == 2:
         totalSpreadDelta = spread1Delta
+        convertDeltaAndShowPlot(totalSpreadDelta)
     else:
         spread2Delta = getSpreadDelta(table[2])
-        totalSpreadDelta = spread1Delta.add(spread2Delta, fill_value=0)
+        convertDeltaAndShowPlot(spread2Delta)
         for i in range(0, 3):
             del table[0]
         for row in table:
-            totalSpreadDelta = totalSpreadDelta.add(getSpreadDelta(row), fill_value=0)
-    convertDeltaAndShowPlot(totalSpreadDelta)
+            convertDeltaAndShowPlot(getSpreadDelta(row))
 
 
 def retrieveTableFromExcel():
@@ -171,52 +168,9 @@ def convertSpreadSeriesToDelta(DATA):
 
 def convertDeltaAndShowPlot(totalSpreadDelta):
     totalCumulativeChart = convertDeltaSeriesToCumulativeGraph(totalSpreadDelta)
-    drawdownArray = getMaxDrawdowns(totalCumulativeChart)
-    print('================')
-    print('Maximum drawdowns: \n', drawdownArray, '\n')
-    print('================')
-    saveChartDataInFile(totalCumulativeChart)
     print("Total Cumulative Chart:")
     print(totalCumulativeChart.astype(int))
     showPlot(totalCumulativeChart)
-
-
-def getMaxDrawdowns(totalCumulativeChart):
-    maxValue = 0
-    drawdownArray = []
-    keyLeft = totalCumulativeChart.index[0]
-    keyRight = totalCumulativeChart.index[0]
-    for i in range(1, len(totalCumulativeChart)-1):
-        if totalCumulativeChart[i] > totalCumulativeChart[i - 1] and totalCumulativeChart[i] >= \
-                totalCumulativeChart[i + 1] and totalCumulativeChart[i] > maxValue:
-            maxValue = totalCumulativeChart[i]
-            keyRight = totalCumulativeChart.index[i]
-        if totalCumulativeChart[i] < totalCumulativeChart[i - 1] and totalCumulativeChart[i] < totalCumulativeChart[i + 1]:
-            keyLeft = totalCumulativeChart.index[i]
-            drawdownArray.append((keyRight, keyLeft, totalCumulativeChart[keyRight], totalCumulativeChart[keyLeft]))
-    dd = filterDrawdowns(drawdownArray)
-    sortedDDArray = sorted(dd, key=lambda x: x[2])[-5:]
-    saveSortedDDArray(sortedDDArray)
-    return sortedDDArray
-
-
-def filterDrawdowns(dd):
-    keyMax = dd[0][0]
-    keyMin = dd[0][1]
-    maxValue = dd[0][2]
-    minValue = dd[0][3]
-    drawndowns = []
-    for i in range(1, len(dd)):
-        if dd[i][2] > maxValue:
-            drawndowns.append((keyMax, keyMin, maxValue - minValue))
-            keyMax = dd[i][0]
-            keyMin = dd[i][1]
-            maxValue = dd[i][2]
-            minValue = dd[i][3]
-        elif minValue > dd[i][3]:
-            keyMin = dd[i][1]
-            minValue = dd[i][3]
-    return drawndowns
 
 
 def convertDeltaSeriesToCumulativeGraph(DATA):
@@ -227,81 +181,6 @@ def convertDeltaSeriesToCumulativeGraph(DATA):
         GRAPHDATA.ix[date] = GRAPHDATA.ix[prev_date] + DATA.ix[date]
         prev_date = date
     return GRAPHDATA
-
-
-def saveSortedDDArray(sortedDDArray):
-    firstDate = []
-    secondDate = []
-    delta = []
-    for i in range(0, len(sortedDDArray)):
-        firstDate.append(sortedDDArray[i][0])
-        secondDate.append(sortedDDArray[i][1])
-        delta.append(sortedDDArray[i][2])
-    saveDrowDownInFile(firstDate, secondDate, delta)
-
-
-def saveDrowDownInFile(firstDate, secondDate, delta):
-    workbook = xlsxwriter.Workbook(REPORTS_DIR + 'drawdown_array.xlsx')
-    worksheet = workbook.add_worksheet()
-    chart = workbook.add_chart({'type': 'column'})
-    col = 0
-    row = 0
-    for date1 in firstDate:
-        dateLeft = datetime.strftime(date1, '%Y-%m-%d')
-        worksheet.write_string(row, col, dateLeft)
-        row += 1
-    row = 0
-    for date2 in secondDate:
-        dateRight = datetime.strftime(date2, '%Y-%m-%d')
-        worksheet.write_string(row, col + 1, dateRight)
-        row += 1
-    row = 0
-    for d in delta:
-        worksheet.write_number(row, col + 2, int(-d))
-        row += 1
-    chart.add_series({
-        'values': '=Sheet1!$C$1:$C$5',
-        'categories': '=Sheet1!$A$1:$A$5'
-    })
-    chart.set_size({'width': 600, 'height': 470})
-    worksheet.insert_chart('D1', chart)
-    workbook.close()
-
-
-def saveChartDataInFile(totalCumulativeChart):
-    workbook = xlsxwriter.Workbook(REPORTS_DIR + 'chart_array.xlsx')
-    worksheet = workbook.add_worksheet()
-    chart = workbook.add_chart({'type': 'line'})
-    a = 0
-    b = 0
-    row = 0
-    col = 0
-    for index in (totalCumulativeChart.index):
-        date = datetime.strftime(index, '%Y-%m-%d')
-        worksheet.write_string(row, col, date)
-        a += 1
-        row += 1
-    row = 0
-    for value in (totalCumulativeChart):
-        worksheet.write_number(row, col + 1, int(value))
-        b += 1
-        row += 1
-    chart.set_x_axis({
-        'date_axis': True
-    })
-    chart.add_series({
-        'values': '=Sheet1!$B$1:$B$' + str(b),
-        'categories': '=Sheet1!$A$1:$A$' + str(a)
-    })
-    chart.set_y_axis({
-        'major_gridlines': {
-            'visible': True,
-            'line': {'width': 1.25, 'dash_type': 'dash'}
-        }
-    })
-    chart.set_size({'width': 720, 'height': 570})
-    worksheet.insert_chart('C1', chart)
-    workbook.close()
 
 
 def showPlot(totalCumulativeChart):

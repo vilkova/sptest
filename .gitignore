@@ -3,6 +3,5 @@ cache-data/*
 spreadmatrix.xlsx
 test.py
 .idea
-.~lock.spreadmatrix.xlsx#
-chart_array.xlsx
-drawdown_array.xlsx
+.~lock.*
+reports/*
