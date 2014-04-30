@@ -32,11 +32,10 @@ def main():
         for row in table:
             convertDeltaAndShowPlot(getSpreadDelta(row))
 
-
 def retrieveTableFromExcel():
     table = loadSpreadMatrix(sys.argv[1])
     rowsWithOneContract = []
-    if(len(sys.argv) == 5):
+    if (len(sys.argv) == 5):
         contract = sys.argv[4]
         rowsWithOneContract.append(table[0])
         for row in table:
@@ -44,7 +43,6 @@ def retrieveTableFromExcel():
                 rowsWithOneContract.append(row)
         table = rowsWithOneContract
     return table
-
 
 def loadSpreadMatrix(filename):
     wb = load_workbook(filename)
@@ -63,7 +61,6 @@ def loadSpreadMatrix(filename):
             table.insert(len(table), table_row)
     return table
 
-
 def getSpreadDelta(row):
     if len(sys.argv) == 2:
         years = [2000]
@@ -75,7 +72,6 @@ def getSpreadDelta(row):
                          int(row[7].decode("utf-8")), True, years)
     return convertSpreadSeriesToDelta(spread)
 
-
 def checkIfCached(filename):
     fileNames = os.listdir(CACHE_DIR)
     for fileName in fileNames:
@@ -83,13 +79,11 @@ def checkIfCached(filename):
             return True
     return False
 
-
 def readCacheFromFile(filename):
     cacheFile = open(CACHE_DIR + filename, "rb")
     cache = pickle.load(cacheFile)
     cacheFile.close()
     return cache
-
 
 def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_DATE, END_DATE, BUCK_PRICE,
                 STARTFROMZERO, years):
@@ -106,17 +100,17 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
         cont1 = str(CONTRACT) + str(M1) + str(i + CONT_YEAR1)
         cont2 = str(CONTRACT) + str(M2) + str(i + CONT_YEAR2)
         print('==============')
-        print ("contract1: " + cont1)
-        print ("contract2: " + cont2)
-        startDate = startdate.replace(year = ST_YEAR - 2000 + i)
-        endDate = enddate.replace(year = END_YEAR - 2000 + i)
+        print("contract1: " + cont1)
+        print("contract2: " + cont2)
+        startDate = startdate.replace(year=ST_YEAR - 2000 + i)
+        endDate = enddate.replace(year=END_YEAR - 2000 + i)
         print('==============')
         print('Trim start: ', startDate.strftime('%Y-%m-%d'))
         print('Trim end: ', endDate.strftime('%Y-%m-%d'))
         print('==============')
         if not checkIfCached(filename):
-            data1 = q.get(cont1, authtoken = AUTH_TOKEN, trim_start = startDate, trim_end = endDate)
-            data2 = q.get(cont2, authtoken = AUTH_TOKEN, trim_start = startDate, trim_end = endDate)
+            data1 = q.get(cont1, authtoken=AUTH_TOKEN, trim_start=startDate, trim_end=endDate)
+            data2 = q.get(cont2, authtoken=AUTH_TOKEN, trim_start=startDate, trim_end=endDate)
             spread = (data1 - data2).Settle * BUCK_PRICE
             if spread.size == 0:
                 print('!!!!!!!!!!!!*****WARNING****!!!!!!!!!!!!')
@@ -126,7 +120,7 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
                 continue
             else:
                 if math.isnan(spread[0]):
-                    spread = spread.fillna(method = 'bfill')
+                    spread = spread.fillna(method='bfill')
                 #replace NaN value with a previous one
                 spread = spread.fillna(method='pad')
 
@@ -146,15 +140,13 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
         sys.exit(-1)
     return totalSpread
 
-
 def writeCacheToFile(filename, spread):
     try:
         cacheFile = open(CACHE_DIR + filename, 'wb')
         pickle.dump(spread, cacheFile)
         cacheFile.close()
     except IOError:
-        print ('Error: can\'t write data to %s' %(CACHE_DIR+filename))
-
+        print('Error: can\'t write data to %s' % (CACHE_DIR + filename))
 
 def convertSpreadSeriesToDelta(DATA):
     DATADELTA = DATA.copy(True)
@@ -165,13 +157,11 @@ def convertSpreadSeriesToDelta(DATA):
             previ = i
     return DATADELTA
 
-
 def convertDeltaAndShowPlot(totalSpreadDelta):
     totalCumulativeChart = convertDeltaSeriesToCumulativeGraph(totalSpreadDelta)
     print("Total Cumulative Chart:")
     print(totalCumulativeChart.astype(int))
     showPlot(totalCumulativeChart)
-
 
 def convertDeltaSeriesToCumulativeGraph(DATA):
     GRAPHDATA = DATA.copy(True)
@@ -181,7 +171,6 @@ def convertDeltaSeriesToCumulativeGraph(DATA):
         GRAPHDATA.ix[date] = GRAPHDATA.ix[prev_date] + DATA.ix[date]
         prev_date = date
     return GRAPHDATA
-
 
 def showPlot(totalCumulativeChart):
     def format_date(x, pos=None):
@@ -205,6 +194,5 @@ def showPlot(totalCumulativeChart):
     ax.yaxis.grid()
     plt.xticks(np.arange(min(ind), max(ind), 15))
     plt.show()
-
 
 main()

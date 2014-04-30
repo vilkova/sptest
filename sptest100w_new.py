@@ -35,11 +35,10 @@ def main():
             totalSpreadDelta = totalSpreadDelta.add(getSpreadDelta(row), fill_value=0)
     convertDeltaAndShowPlot(totalSpreadDelta)
 
-
 def retrieveTableFromExcel():
     table = loadSpreadMatrix(sys.argv[1])
     rowsWithOneContract = []
-    if(len(sys.argv) == 5):
+    if (len(sys.argv) == 5):
         contract = sys.argv[4]
         rowsWithOneContract.append(table[0])
         for row in table:
@@ -47,7 +46,6 @@ def retrieveTableFromExcel():
                 rowsWithOneContract.append(row)
         table = rowsWithOneContract
     return table
-
 
 def loadSpreadMatrix(filename):
     wb = load_workbook(filename)
@@ -66,7 +64,6 @@ def loadSpreadMatrix(filename):
             table.insert(len(table), table_row)
     return table
 
-
 def getSpreadDelta(row):
     if len(sys.argv) == 2:
         years = [2000]
@@ -78,7 +75,6 @@ def getSpreadDelta(row):
                          int(row[7].decode("utf-8")), True, years)
     return convertSpreadSeriesToDelta(spread)
 
-
 def checkIfCached(filename):
     fileNames = os.listdir(CACHE_DIR)
     for fileName in fileNames:
@@ -86,13 +82,11 @@ def checkIfCached(filename):
             return True
     return False
 
-
 def readCacheFromFile(filename):
     cacheFile = open(CACHE_DIR + filename, "rb")
     cache = pickle.load(cacheFile)
     cacheFile.close()
     return cache
-
 
 def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_DATE, END_DATE, BUCK_PRICE,
                 STARTFROMZERO, years):
@@ -109,17 +103,17 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
         cont1 = str(CONTRACT) + str(M1) + str(i + CONT_YEAR1)
         cont2 = str(CONTRACT) + str(M2) + str(i + CONT_YEAR2)
         print('==============')
-        print ("contract1: " + cont1)
-        print ("contract2: " + cont2)
-        startDate = startdate.replace(year = ST_YEAR - 2000 + i)
-        endDate = enddate.replace(year = END_YEAR - 2000 + i)
+        print("contract1: " + cont1)
+        print("contract2: " + cont2)
+        startDate = startdate.replace(year=ST_YEAR - 2000 + i)
+        endDate = enddate.replace(year=END_YEAR - 2000 + i)
         print('==============')
         print('Trim start: ', startDate.strftime('%Y-%m-%d'))
         print('Trim end: ', endDate.strftime('%Y-%m-%d'))
         print('==============')
         if not checkIfCached(filename):
-            data1 = q.get(cont1, authtoken = AUTH_TOKEN, trim_start = startDate, trim_end = endDate)
-            data2 = q.get(cont2, authtoken = AUTH_TOKEN, trim_start = startDate, trim_end = endDate)
+            data1 = q.get(cont1, authtoken=AUTH_TOKEN, trim_start=startDate, trim_end=endDate)
+            data2 = q.get(cont2, authtoken=AUTH_TOKEN, trim_start=startDate, trim_end=endDate)
             spread = (data1 - data2).Settle * BUCK_PRICE
             if spread.size == 0:
                 print('!!!!!!!!!!!!*****WARNING****!!!!!!!!!!!!')
@@ -129,7 +123,7 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
                 continue
             else:
                 if math.isnan(spread[0]):
-                    spread = spread.fillna(method = 'bfill')
+                    spread = spread.fillna(method='bfill')
                 #replace NaN value with a previous one
                 spread = spread.fillna(method='pad')
 
@@ -149,15 +143,13 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
         sys.exit(-1)
     return totalSpread
 
-
 def writeCacheToFile(filename, spread):
     try:
         cacheFile = open(CACHE_DIR + filename, 'wb')
         pickle.dump(spread, cacheFile)
         cacheFile.close()
     except IOError:
-        print ('Error: can\'t write data to %s' %(CACHE_DIR+filename))
-
+        print('Error: can\'t write data to %s' % (CACHE_DIR + filename))
 
 def convertSpreadSeriesToDelta(DATA):
     DATADELTA = DATA.copy(True)
@@ -168,37 +160,34 @@ def convertSpreadSeriesToDelta(DATA):
             previ = i
     return DATADELTA
 
-
 def convertDeltaAndShowPlot(totalSpreadDelta):
     totalCumulativeChart = convertDeltaSeriesToCumulativeGraph(totalSpreadDelta)
     drawdownArray = getMaxDrawdowns(totalCumulativeChart)
     print('================')
-    print('Maximum drawdowns: \n', drawdownArray, '\n')
+    print('Maximum drawdowns: \n', sorted(drawdownArray, key=lambda x: x[2])[-5:], '\n')
     print('================')
     saveChartDataInFile(totalCumulativeChart)
     print("Total Cumulative Chart:")
     print(totalCumulativeChart.astype(int))
     showPlot(totalCumulativeChart)
 
-
 def getMaxDrawdowns(totalCumulativeChart):
     maxValue = 0
     drawdownArray = []
     keyLeft = totalCumulativeChart.index[0]
     keyRight = totalCumulativeChart.index[0]
-    for i in range(1, len(totalCumulativeChart)-1):
+    for i in range(1, len(totalCumulativeChart) - 1):
         if totalCumulativeChart[i] > totalCumulativeChart[i - 1] and totalCumulativeChart[i] >= \
                 totalCumulativeChart[i + 1] and totalCumulativeChart[i] > maxValue:
             maxValue = totalCumulativeChart[i]
             keyRight = totalCumulativeChart.index[i]
-        if totalCumulativeChart[i] < totalCumulativeChart[i - 1] and totalCumulativeChart[i] < totalCumulativeChart[i + 1]:
+        if totalCumulativeChart[i] < totalCumulativeChart[i - 1] and totalCumulativeChart[i] < totalCumulativeChart[
+                    i + 1]:
             keyLeft = totalCumulativeChart.index[i]
             drawdownArray.append((keyRight, keyLeft, totalCumulativeChart[keyRight], totalCumulativeChart[keyLeft]))
     dd = filterDrawdowns(drawdownArray)
-    sortedDDArray = sorted(dd, key=lambda x: x[2])[-5:]
-    saveSortedDDArray(sortedDDArray)
-    return sortedDDArray
-
+    saveSortedDDArray(dd)
+    return dd
 
 def filterDrawdowns(dd):
     keyMax = dd[0][0]
@@ -218,7 +207,6 @@ def filterDrawdowns(dd):
             minValue = dd[i][3]
     return drawndowns
 
-
 def convertDeltaSeriesToCumulativeGraph(DATA):
     GRAPHDATA = DATA.copy(True)
     prev_date = DATA.index[0]
@@ -228,22 +216,26 @@ def convertDeltaSeriesToCumulativeGraph(DATA):
         prev_date = date
     return GRAPHDATA
 
-
 def saveSortedDDArray(sortedDDArray):
+    workbook = xlsxwriter.Workbook(REPORTS_DIR + 'drawdown_array.xlsx')
+    worksheet = workbook.add_worksheet('Maximum drawdowns')
+    worksheet1 = workbook.add_worksheet('All drawdowns')
+    chart = getChartWithMaximumDrowdowns(workbook, worksheet, sortedDDArray)
+    chart1 = getChartWithAllDrawdowns(workbook, worksheet1, sortedDDArray)
+    worksheet.insert_chart('D1', chart)
+    worksheet1.insert_chart('D1', chart1)
+    workbook.close()
+
+def getChartWithMaximumDrowdowns(workbook, worksheet, sortedDDArray):
     firstDate = []
     secondDate = []
     delta = []
+    sortedDDArray = sorted(sortedDDArray, key=lambda x: x[2])[-5:]
+    chart = workbook.add_chart({'type': 'column'})
     for i in range(0, len(sortedDDArray)):
         firstDate.append(sortedDDArray[i][0])
         secondDate.append(sortedDDArray[i][1])
         delta.append(sortedDDArray[i][2])
-    saveDrowDownInFile(firstDate, secondDate, delta)
-
-
-def saveDrowDownInFile(firstDate, secondDate, delta):
-    workbook = xlsxwriter.Workbook(REPORTS_DIR + 'drawdown_array.xlsx')
-    worksheet = workbook.add_worksheet()
-    chart = workbook.add_chart({'type': 'column'})
     col = 0
     row = 0
     for date1 in firstDate:
@@ -260,12 +252,73 @@ def saveDrowDownInFile(firstDate, secondDate, delta):
         worksheet.write_number(row, col + 2, int(-d))
         row += 1
     chart.add_series({
-        'values': '=Sheet1!$C$1:$C$5',
-        'categories': '=Sheet1!$A$1:$A$5'
+        'values': '=Maximum drawdowns!$C$1:$C$5',
+        'categories': '=Maximum drawdowns!$A$1:$A$5'
     })
     chart.set_size({'width': 600, 'height': 470})
-    worksheet.insert_chart('D1', chart)
-    workbook.close()
+    return chart
+
+def getChartWithAllDrawdowns(workbook, worksheet1, sortedDDArray):
+    chart1 = workbook.add_chart({'type': 'line'})
+    firstDate = []
+    secondDate = []
+    delta = []
+    for i in range(0, len(sortedDDArray)):
+        firstDate.append(sortedDDArray[i][0])
+        secondDate.append(sortedDDArray[i][1])
+        delta.append(sortedDDArray[i][2])
+    col = 0
+    row = 0
+    a = 0
+    c = 0
+    for date1 in firstDate:
+        dateLeft = datetime.strftime(date1, '%Y-%m-%d')
+        worksheet1.write_string(row, col, dateLeft)
+        row += 1
+        a += 1
+    row = 0
+    for date2 in secondDate:
+        dateRight = datetime.strftime(date2, '%Y-%m-%d')
+        worksheet1.write_string(row, col + 1, dateRight)
+        row += 1
+    row = 0
+    for d in delta:
+        worksheet1.write_number(row, col + 2, int(-d))
+        row += 1
+        c += 1
+    chart1.add_series({
+        'values': '=Maximum drawdowns!$C$1:$C$' + str(c),
+        'categories': '=Maximum drawdowns!$A$1:$A$' + str(a)
+    })
+    chart1.set_size({'width': 600, 'height': 470})
+    return chart1
+
+# def saveDrowDownInFile(firstDate, secondDate, delta):
+# workbook = xlsxwriter.Workbook(REPORTS_DIR + 'drawdown_array.xlsx')
+# worksheet = workbook.add_worksheet()
+# chart = workbook.add_chart({'type': 'column'})
+# col = 0
+# row = 0
+# for date1 in firstDate:
+#     dateLeft = datetime.strftime(date1, '%Y-%m-%d')
+#     worksheet.write_string(row, col, dateLeft)
+#     row += 1
+# row = 0
+# for date2 in secondDate:
+#     dateRight = datetime.strftime(date2, '%Y-%m-%d')
+#     worksheet.write_string(row, col + 1, dateRight)
+#     row += 1
+# row = 0
+# for d in delta:
+#     worksheet.write_number(row, col + 2, int(-d))
+#     row += 1
+# chart.add_series({
+#     'values': '=Sheet1!$C$1:$C$5',
+#     'categories': '=Sheet1!$A$1:$A$5'
+# })
+# chart.set_size({'width': 600, 'height': 470})
+# worksheet.insert_chart('D1', chart)
+# workbook.close()
 
 
 def saveChartDataInFile(totalCumulativeChart):
@@ -303,7 +356,6 @@ def saveChartDataInFile(totalCumulativeChart):
     worksheet.insert_chart('C1', chart)
     workbook.close()
 
-
 def showPlot(totalCumulativeChart):
     def format_date(x, pos=None):
         thisind = np.clip(int(x + 0.5), 0, N - 1)
@@ -326,6 +378,5 @@ def showPlot(totalCumulativeChart):
     ax.yaxis.grid()
     plt.xticks(np.arange(min(ind), max(ind), 15))
     plt.show()
-
 
 main()
