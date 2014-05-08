@@ -162,34 +162,87 @@ def convertSpreadSeriesToDelta(DATA):
 
 def convertDeltaAndShowPlot(totalSpreadDelta):
     totalCumulativeChart = convertDeltaSeriesToCumulativeGraph(totalSpreadDelta)
+    dd = getDrawdowns(totalCumulativeChart)
+    drawdownArray = foo(totalCumulativeChart)
+    saveSortedDDArray(drawdownArray, dd)
+    print('================')
+    print('Maximum drawdowns: \n', sorted(dd, key=lambda x: x)[-5:], '\n')
+    print('================')
     saveChartDataInFile(totalCumulativeChart)
-    drawdownArray = getMaxDrawdowns(totalCumulativeChart)
-    print('================')
-    print('Maximum drawdowns: \n', sorted(drawdownArray, key=lambda x: x[1])[-5:], '\n')
-    print('================')
     print("Total Cumulative Chart:")
     print(totalCumulativeChart.astype(int))
     showPlot(totalCumulativeChart)
 
+def foo(chart):
+    res = pd.Series()
+    flag = False
+    prev = 0
+    ind = chart.index[0]
+    res.set_value(ind, prev)
+    for i in range(1, len(chart)):
+        if flag:
+            if chart[i] > prev:
+                prev = chart[i]
+                ind = chart.index[i]
+                res.set_value(ind, 0)
+                flag = False
+            else:
+                ind = chart.index[i]
+                res.set_value(ind, chart[i] - prev)
+        else:
+            if chart[i] > prev:
+                prev = chart[i]
+                ind = chart.index[i]
+                res.set_value(ind, 0)
+            else:
+                ind = chart.index[i]
+                res.set_value(ind, chart[i] - prev)
+                flag = True
+    return res
+
+def getDrawdowns(chart):
+    filteredDDs = getMaxDrawdowns(chart)
+    starts = []
+    ends = []
+    start = chart[1]
+    for i in range(1, len(chart)):
+        if chart[i] > start and chart[i] > chart[i-1]:
+            if chart[i] > chart[i+1]:
+                start = chart[i]
+                startDate = chart.index[i]
+                starts.append(startDate)
+            if chart[i] >= start:
+                    endDate = chart.index[i]
+                    ends.append(endDate)
+    return mix_dd(filteredDDs, ends)
+
+def mix_dd(filteredDDs, ends):
+    dates = []
+    for i in range(0, len(filteredDDs)):
+        startDate = filteredDDs[i][0]
+        for j in range(1, len(ends)):
+            if filteredDDs[i][0] < ends[j]:
+                endDate = ends[j]
+                dates.append((startDate, endDate, filteredDDs[i][2]))
+                break
+    return dates
+
 def getMaxDrawdowns(totalCumulativeChart):
+    maxValue = 0
     drawdownArray = []
-    maxValue = totalCumulativeChart[0]
-    key_right = totalCumulativeChart.index[0]
-    key_left = totalCumulativeChart.index[0]
+    keyLeft = totalCumulativeChart.index[0]
+    keyRight = totalCumulativeChart.index[0]
     for i in range(1, len(totalCumulativeChart) - 1):
         if totalCumulativeChart[i] > totalCumulativeChart[i - 1] and totalCumulativeChart[i] >= \
-                totalCumulativeChart[i + 1] and totalCumulativeChart[i] > maxValue:
-            maxValue = totalCumulativeChart[i]
-            key_left = totalCumulativeChart.index[i]
+                totalCumulativeChart[i + 1]:
+            if totalCumulativeChart[i] > maxValue:
+                maxValue = totalCumulativeChart[i]
+                keyRight = totalCumulativeChart.index[i]
         if totalCumulativeChart[i] < totalCumulativeChart[i - 1] and totalCumulativeChart[i] < totalCumulativeChart[
                     i + 1]:
-            key_right = totalCumulativeChart.index[i]
-            drawdownArray.append(
-                (key_left, key_right, totalCumulativeChart[key_left], totalCumulativeChart[key_right], i))
-    dd = filterDrawdowns(drawdownArray)
-    mixedDD = mixDDWithTCC(dd, totalCumulativeChart)
-    saveSortedDDArray(mixedDD)
-    return mixedDD
+            keyLeft = totalCumulativeChart.index[i]
+            drawdownArray.append((keyRight, keyLeft, totalCumulativeChart[keyRight], totalCumulativeChart[keyLeft]))
+    return filterDrawdowns(drawdownArray)
 
 def filterDrawdowns(dd):
     keyMax = dd[0][0]
@@ -199,7 +252,7 @@ def filterDrawdowns(dd):
     drawndowns = []
     for i in range(1, len(dd)):
         if dd[i][2] > maxValue:
-            drawndowns.append((keyMax, keyMin, maxValue - minValue, dd[i][4]))
+            drawndowns.append((keyMax, keyMin, maxValue - minValue))
             keyMax = dd[i][0]
             keyMin = dd[i][1]
             maxValue = dd[i][2]
@@ -208,23 +261,6 @@ def filterDrawdowns(dd):
             keyMin = dd[i][1]
             minValue = dd[i][3]
     return drawndowns
-
-def mixDDWithTCC(dd, chart):
-    result = []
-    keys = chart.keys()
-    length = len(keys)
-    for i in range(0, len(dd)):
-        initKey = dd[i][0]
-        initValue = chart[initKey]
-        chartIndex = dd[i][3]
-        for j in range(chartIndex + 1, length):
-            if chart[j] >= initValue:
-                finalKey = chart.index[j]
-                break
-        result.append((initKey, 0))
-        result.append((dd[i][1], dd[i][2]))
-        result.append((finalKey, 0))
-    return result
 
 def convertDeltaSeriesToCumulativeGraph(DATA):
     GRAPHDATA = DATA.copy(True)
@@ -235,15 +271,16 @@ def convertDeltaSeriesToCumulativeGraph(DATA):
         prev_date = date
     return GRAPHDATA
 
-def saveSortedDDArray(dd):
+def saveSortedDDArray(sortedDDArray, dd):
     workbook = xlsxwriter.Workbook(REPORTS_DIR + 'drawdown_array.xlsx')
     worksheet = workbook.add_worksheet('Maximum drawdowns')
     worksheet1 = workbook.add_worksheet('All drawdowns')
     worksheet.set_column('A:B', 10)
     worksheet1.set_column('A:B', 10)
+    worksheet1.set_column('M:O', 10)
     chart = getChartWithMaximumDrowdowns(workbook, worksheet, dd)
-    chart1 = getChartWithAllDrawdowns(workbook, worksheet1, dd)
-    worksheet.insert_chart('C1', chart)
+    chart1 = getChartWithAllDrawdowns(workbook, worksheet1, sortedDDArray, dd)
+    worksheet.insert_chart('D1', chart)
     worksheet1.insert_chart('C1', chart1)
     workbook.close()
 
@@ -251,47 +288,61 @@ def getChartWithMaximumDrowdowns(workbook, worksheet, sortedDDArray):
     firstDate = []
     secondDate = []
     delta = []
-    sortedDDArray = sorted(sortedDDArray, key=lambda x: x[1])[-5:]
+    sortedDDArray = sorted(sortedDDArray, key=lambda x: x[2])[-5:]
     chart = workbook.add_chart({'type': 'column'})
     for i in range(0, len(sortedDDArray)):
         firstDate.append(sortedDDArray[i][0])
-        delta.append(sortedDDArray[i][1])
+        secondDate.append(sortedDDArray[i][1])
+        delta.append(sortedDDArray[i][2])
     col = 0
     row = 0
     for date1 in firstDate:
-        dateLeft = datetime.strftime(date1, '%d/%m/%y')
+        dateLeft = datetime.strftime(date1, '%Y-%m-%d')
         worksheet.write_string(row, col, dateLeft)
         row += 1
     row = 0
+    for date2 in secondDate:
+        dateRight = datetime.strftime(date2, '%Y-%m-%d')
+        worksheet.write_string(row, col + 1, dateRight)
+        row += 1
+    row = 0
     for d in delta:
-        worksheet.write_number(row, col + 1, int(-d))
+        worksheet.write_number(row, col + 2, int(-d))
         row += 1
     chart.add_series({
-        'values': '=Maximum drawdowns!$B$1:$B$5',
+        'values': '=Maximum drawdowns!$C$1:$C$5',
         'categories': '=Maximum drawdowns!$A$1:$A$5'
     })
     chart.set_size({'width': 600, 'height': 470})
     return chart
 
-def getChartWithAllDrawdowns(workbook, worksheet1, sortedDDArray):
+def getChartWithAllDrawdowns(workbook, worksheet1, sortedDDArray, dd):
     chart1 = workbook.add_chart({'type': 'area'})
     firstDate = []
+    secondDate = []
     delta = []
-    for i in range(0, len(sortedDDArray)):
-        firstDate.append(sortedDDArray[i][0])
-        delta.append(sortedDDArray[i][1])
+    for i in range(0, len(dd)):
+        firstDate.append(dd[i][0])
+        secondDate.append(dd[i][1])
+        delta.append(dd[i][2])
+    writeArrayOFAllDDs(firstDate, secondDate, delta, worksheet1)
     col = 0
     row = 0
     a = 0
     c = 0
-    for date1 in firstDate:
-        dateLeft = datetime.strftime(date1, '%d/%m/%y')
+    for date1 in (sortedDDArray.index):
+        dateLeft = datetime.strftime(date1, '%Y-%m-%d')
         worksheet1.write_string(row, col, dateLeft)
         row += 1
         a += 1
+    # row = 0
+    # for date2 in secondDate:
+    #     dateRight = datetime.strftime(date2, '%Y-%m-%d')
+    #     worksheet1.write_string(row, col + 1, dateRight)
+    #     row += 1
     row = 0
-    for d in delta:
-        worksheet1.write_number(row, col + 1, int(-d))
+    for d in (sortedDDArray):
+        worksheet1.write_number(row, col + 1, int(d))
         row += 1
         c += 1
     chart1.add_series({
@@ -301,10 +352,27 @@ def getChartWithAllDrawdowns(workbook, worksheet1, sortedDDArray):
     chart1.set_size({'width': 600, 'height': 470})
     return chart1
 
+def writeArrayOFAllDDs(firstDate, secondDate, delta, worksheet1):
+    row = 0
+    col = 12
+
+    for date1 in firstDate:
+        dateLeft = datetime.strftime(date1, '%Y-%m-%d')
+        worksheet1.write_string(row, col, dateLeft)
+        row += 1
+    row = 0
+    for date2 in secondDate:
+        dateRight = datetime.strftime(date2, '%Y-%m-%d')
+        worksheet1.write_string(row, col+1, dateRight)
+        row += 1
+    row = 0
+    for d in delta:
+        worksheet1.write_number(row, col + 2, int(-d))
+        row += 1
+
 def saveChartDataInFile(totalCumulativeChart):
     workbook = xlsxwriter.Workbook(REPORTS_DIR + 'chart_array.xlsx')
     worksheet = workbook.add_worksheet()
-    worksheet.set_column('A:A', 10)
     chart = workbook.add_chart({'type': 'line'})
     a = 0
     b = 0
@@ -357,7 +425,7 @@ def showPlot(totalCumulativeChart):
     fig.autofmt_xdate()
 
     ax.yaxis.grid()
-    plt.xticks(np.arange(min(ind), max(ind), 25))
+    plt.xticks(np.arange(min(ind), max(ind), 15))
     plt.show()
 
 main()
