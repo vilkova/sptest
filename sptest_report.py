@@ -153,54 +153,12 @@ def convertDeltaAndShowPlot(totalSpreadDelta):
     totalCumulativeChart = convertDeltaSeriesToCumulativeGraph(totalSpreadDelta)
     saveChartDataInFile(totalCumulativeChart)
 
-    drawdownArray = getMaxDrawdowns(totalCumulativeChart)
-    saveSortedDDArray(drawdownArray)
-    print('================')
-    print('Maximum drawdowns: \n', drawdownArray, '\n')
-    print('================')
-
     yieldArray = getYieldArray(totalCumulativeChart)
     saveYieldInFile(yieldArray)
 
     print("Total Cumulative Chart:")
     print(totalCumulativeChart.astype(int))
     showPlot(totalCumulativeChart)
-
-def getMaxDrawdowns(totalCumulativeChart):
-    maxValue = 0
-    drawdownArray = []
-    keyLeft = totalCumulativeChart.index[0]
-    keyRight = totalCumulativeChart.index[0]
-    for i in range(1, len(totalCumulativeChart) - 1):
-        if totalCumulativeChart[i] > totalCumulativeChart[i - 1] and totalCumulativeChart[i] >= \
-                totalCumulativeChart[i + 1] and totalCumulativeChart[i] > maxValue:
-            maxValue = totalCumulativeChart[i]
-            keyRight = totalCumulativeChart.index[i]
-        if totalCumulativeChart[i] < totalCumulativeChart[i - 1] and totalCumulativeChart[i] < totalCumulativeChart[
-                    i + 1]:
-            keyLeft = totalCumulativeChart.index[i]
-            drawdownArray.append((keyRight, keyLeft, totalCumulativeChart[keyRight], totalCumulativeChart[keyLeft]))
-    dd = filterDrawdowns(drawdownArray)
-    sortedDDArray = sorted(dd, key=lambda x: x[2])[-5:]
-    return sortedDDArray
-
-def filterDrawdowns(dd):
-    keyMax = dd[0][0]
-    keyMin = dd[0][1]
-    maxValue = dd[0][2]
-    minValue = dd[0][3]
-    drawndowns = []
-    for i in range(1, len(dd)):
-        if dd[i][2] > maxValue:
-            drawndowns.append((keyMax, keyMin, maxValue - minValue))
-            keyMax = dd[i][0]
-            keyMin = dd[i][1]
-            maxValue = dd[i][2]
-            minValue = dd[i][3]
-        elif minValue > dd[i][3]:
-            keyMin = dd[i][1]
-            minValue = dd[i][3]
-    return drawndowns
 
 def getYieldArray(chart):
     yieldReport = []
