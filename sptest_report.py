@@ -15,14 +15,11 @@ import xlsxwriter
 
 AUTH_TOKEN = 'e6FuWkfWH9qypKzJz6sR'
 CACHE_DIR = "cache-data/"
-# REPORTS_DIR = "reports/"
 B = sys.argv[4]
 
 def main():
     if not os.path.exists(CACHE_DIR):
         os.makedirs(CACHE_DIR)
-    # if not os.path.exists(REPORTS_DIR):
-    #     os.makedirs(REPORTS_DIR)
     table = retrieveTableFromExcel()
     spread1Delta = getSpreadDelta(table[1])
     if len(table) == 2:
