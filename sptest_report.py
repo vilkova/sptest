@@ -169,7 +169,6 @@ def convertDeltaAndShowPlot(totalSpreadDelta):
 
     yieldArray = getYieldArray(totalCumulativeChart)
 
-
     saveAllInFile(totalCumulativeChart, drawdownArray, dd, yieldArray)
 
     print("Total Cumulative Chart:")
@@ -349,7 +348,7 @@ def getYearlyReport(chart):
     print('================')
     return yearlyReport
 
-def getMonthlyChart(workbook, worksheet1, yieldArray):
+def getMonthlyChart(workbook, worksheet, yieldArray):
     m_dates = []
     m_values = []
     chart = workbook.add_chart({'type': 'column'})
@@ -361,14 +360,18 @@ def getMonthlyChart(workbook, worksheet1, yieldArray):
     am = 0
     bm = 0
     for date in m_dates:
-        worksheet1.write_string(row, col, datetime.strftime(date, '%Y-%m-%d'))
+        worksheet.write_string(row, col, datetime.strftime(date, '%Y-%m-%d'))
         row += 1
         am += 1
     row = 0
     for value in m_values:
-        worksheet1.write_number(row, col + 1, value)
+        worksheet.write_number(row, col + 1, value)
         row += 1
         bm += 1
+
+    worksheet.write_string(3, 14, "MEAN:")
+    worksheet.write_number(3, 15, (sum(m_values)/len(m_values)))
+
     chart.add_series({
         'values': '=Monthly Report!$B$1:$B$' + str(bm),
         'categories': '=Monthly Report!$A$1:$A$' + str(am)
@@ -376,7 +379,7 @@ def getMonthlyChart(workbook, worksheet1, yieldArray):
     chart.set_size({'width': 720, 'height': 570})
     return chart
 
-def getYearlyChart(workbook, worksheet2, yieldArray):
+def getYearlyChart(workbook, worksheet, yieldArray):
     y_dates = []
     y_values = []
     chart = workbook.add_chart({'type': 'column'})
@@ -388,14 +391,17 @@ def getYearlyChart(workbook, worksheet2, yieldArray):
     a = 0
     b = 0
     for date in y_dates:
-        worksheet2.write_string(row, col, datetime.strftime(date, '%Y-%m-%d'))
+        worksheet.write_string(row, col, datetime.strftime(date, '%Y-%m-%d'))
         row += 1
         a += 1
     row = 0
     for value in y_values:
-        worksheet2.write_number(row, col + 1, value)
+        worksheet.write_number(row, col + 1, value)
         row += 1
         b += 1
+    worksheet.write_string(3, 14, "MEAN:")
+    worksheet.write_number(3, 15, (sum(y_values)/len(y_values)))
+
     chart.add_series({
         'values': '=Yearly Report!$B$1:$B$' + str(b),
         'categories': '=Yearly Report!$A$1:$A$' + str(a)
