@@ -164,8 +164,39 @@ def getYieldArray(chart):
     yieldReport = []
     monthlyReport = getMonthlyReport(chart)
     yearlyReport = getYearlyReport(chart)
-    yieldReport.append((monthlyReport, yearlyReport))
+    dailyReport = getDailyReportWithVAMI(chart)
+    yieldReport.append((monthlyReport, yearlyReport, dailyReport))
     return yieldReport
+
+def getDailyReportWithVAMI(chart):
+
+    def getVAMI(dailyReport):
+        v1 = 1000
+        vaim = [(dailyReport.index[0], v1)]
+        for i in range(1 , len(dailyReport)):
+            v_prev = vaim[i-1][1]
+            vaim.append((dailyReport.index[i], v_prev + v1*dailyReport[i]))
+        return vaim
+
+    dailyReport = pd.Series()
+    day = chart.index[0].strftime('%Y-%m-%d')
+    KArray = []
+    for i in range(1, len(chart)):
+        if chart.index[i].strftime('%Y-%m-%d') > day:
+            if chart.index[i].strftime('%Y-%m-%d') > chart.index[i - 1].strftime('%Y-%m-%d'):
+                KD = chart[i - 1]
+                KArray.append((chart.index[i - 1], KD))
+                day = chart.index[i].strftime('%Y-%m-%d')
+    firstDay = (int(KArray[0][1]) - chart[0]) / int(B)
+    dailyReport.set_value(chart.index[0], firstDay)
+    for j in range(1, len(KArray)):
+        KD2 = KArray[j][1]
+        KD1 = KArray[j - 1][1]
+        yieldValue = (int(KD2) - int(KD1)) / int(B)
+        dailyReport.set_value(KArray[j][0], yieldValue)
+    lastDay = (chart[-1] - KD2) / int(B)
+    dailyReport.set_value(chart.index[-1], lastDay)
+    return getVAMI(dailyReport)
 
 def getMonthlyReport(chart):
     monthlyReport = []
@@ -186,7 +217,7 @@ def getMonthlyReport(chart):
         monthlyReport.append((KArray[j][0], yieldValue))
     lastMonth = (chart[-1] - KM2) / int(B)
     monthlyReport.append((chart.index[-1], lastMonth))
-    print('Monthly yield report: \n', monthlyReport, '\n')
+    print('Monthly yield report: \n', monthlyReport)
     print('================')
     return monthlyReport
 
@@ -209,7 +240,7 @@ def getYearlyReport(chart):
         yearlyReport.append((KYearsArray[w][0], yearYieldValue))
     lastYear = (chart[-1] - KY2) / int(B)
     yearlyReport.append((chart.index[-1], lastYear))
-    print('Yearly yield report: \n', yearlyReport, '\n')
+    print('Yearly yield report: \n', yearlyReport)
     print('================')
     return yearlyReport
 
@@ -218,13 +249,21 @@ def saveYieldInFile(yieldArray):
     m_values = []
     y_dates = []
     y_values = []
+    d_dates = []
+    d_values = []
     workbook = xlsxwriter.Workbook(REPORTS_DIR + 'yield_array.xlsx')
     worksheet1 = workbook.add_worksheet("Monthly Report")
     worksheet2 = workbook.add_worksheet("Yearly Report")
+    worksheet3 = workbook.add_worksheet("VAMI Report")
+    worksheet1.set_column('A:B', 10)
+    worksheet2.set_column('A:B', 10)
+    worksheet3.set_column('A:B', 10)
     chart1 = getMonthlyChart(workbook, worksheet1, m_dates, m_values, yieldArray)
     chart2 = getYearlyChart(workbook, worksheet2, y_dates, y_values, yieldArray)
+    chart3 = getDailyChart(workbook, worksheet3, d_dates, d_values, yieldArray)
     worksheet1.insert_chart('C1', chart1)
     worksheet2.insert_chart('C1', chart2)
+    worksheet3.insert_chart('C1', chart3)
     workbook.close()
 
 def getMonthlyChart(workbook, worksheet1, m_dates, m_values, yieldArray):
@@ -276,6 +315,33 @@ def getYearlyChart(workbook, worksheet2, y_dates, y_values, yieldArray):
     })
     chart2.set_size({'width': 500, 'height': 370})
     return chart2
+
+def getDailyChart(workbook, worksheet3, d_dates, d_values, yieldArray):
+    chart3 = workbook.add_chart({'type': 'column'})
+    for i in range(0,len(yieldArray[0][2])):
+        d_dates.append(yieldArray[0][2][i][0])
+        d_values.append(yieldArray[0][2][i][1])
+    col = 0
+    row = 0
+    a = 0
+    b = 0
+    for date in d_dates:
+        worksheet3.write_string(row, col, datetime.strftime(date, '%Y-%m-%d'))
+        row += 1
+        a += 1
+    row = 0
+    for value in d_values:
+        worksheet3.write_number(row, col + 1, value)
+        row += 1
+        b += 1
+    chart3.add_series({
+        'values': '=VAMI Report!$B$1:$B$' + str(b),
+        'categories': '=VAMI Report!$A$1:$A$' + str(a)
+    })
+    chart3.set_size({'width': 500, 'height': 370})
+
+    return chart3
+
 
 def convertDeltaSeriesToCumulativeGraph(DATA):
     GRAPHDATA = DATA.copy(True)
