@@ -31,7 +31,11 @@ def main():
             del table[0]
         for row in table:
             totalSpreadDelta = totalSpreadDelta.add(getSpreadDelta(row), fill_value=0)
-    convertDeltaAndShowPlot(totalSpreadDelta)
+    totalCumulativeChart = convertDeltaSeriesToCumulativeGraph(totalSpreadDelta)
+    saveReports(totalCumulativeChart)
+    print("Total Cumulative Chart:")
+    print(totalCumulativeChart.astype(int))
+    showPlot(totalCumulativeChart)
 
 def retrieveTableFromExcel():
     table = loadSpreadMatrix(sys.argv[1])
@@ -72,19 +76,6 @@ def getSpreadDelta(row):
                          int(row[4].decode("utf-8")), row[5].decode("utf-8"), row[6].decode("utf-8"),
                          int(row[7].decode("utf-8")), True, years)
     return convertSpreadSeriesToDelta(spread)
-
-def checkIfCached(filename):
-    fileNames = os.listdir(CACHE_DIR)
-    for fileName in fileNames:
-        if fileName == filename:
-            return True
-    return False
-
-def readCacheFromFile(filename):
-    cacheFile = open(CACHE_DIR + filename, "rb")
-    cache = pickle.load(cacheFile)
-    cacheFile.close()
-    return cache
 
 def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_DATE, END_DATE, BUCK_PRICE,
                 STARTFROMZERO, years):
@@ -141,6 +132,13 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
         sys.exit(-1)
     return totalSpread
 
+def checkIfCached(filename):
+    fileNames = os.listdir(CACHE_DIR)
+    for fileName in fileNames:
+        if fileName == filename:
+            return True
+    return False
+
 def writeCacheToFile(filename, spread):
     try:
         cacheFile = open(CACHE_DIR + filename, 'wb')
@@ -148,6 +146,12 @@ def writeCacheToFile(filename, spread):
         cacheFile.close()
     except IOError:
         print('Error: can\'t write data to %s' % (CACHE_DIR + filename))
+
+def readCacheFromFile(filename):
+    cacheFile = open(CACHE_DIR + filename, "rb")
+    cache = pickle.load(cacheFile)
+    cacheFile.close()
+    return cache
 
 def convertSpreadSeriesToDelta(DATA):
     DATADELTA = DATA.copy(True)
@@ -158,24 +162,25 @@ def convertSpreadSeriesToDelta(DATA):
             previ = i
     return DATADELTA
 
-def convertDeltaAndShowPlot(totalSpreadDelta):
-    totalCumulativeChart = convertDeltaSeriesToCumulativeGraph(totalSpreadDelta)
+def convertDeltaSeriesToCumulativeGraph(DATA):
+    GRAPHDATA = DATA.copy(True)
+    prev_date = DATA.index[0]
+    for i in range(1, len(DATA.index)):
+        date = DATA.index[i]
+        GRAPHDATA.ix[date] = GRAPHDATA.ix[prev_date] + DATA.ix[date]
+        prev_date = date
+    return GRAPHDATA
 
+def saveReports(totalCumulativeChart):
     dd = getDrawdowns(totalCumulativeChart)
-    drawdownArray = foo(totalCumulativeChart)
+    drawdownArray = retrieveDrawdowns(totalCumulativeChart)
     print('================')
     print('Maximum drawdowns: \n', sorted(dd, key=lambda x: x)[-5:], '\n')
     print('================')
-
     yieldArray = getYieldArray(totalCumulativeChart)
-
     saveAllInFile(totalCumulativeChart, drawdownArray, dd, yieldArray)
 
-    print("Total Cumulative Chart:")
-    print(totalCumulativeChart.astype(int))
-    showPlot(totalCumulativeChart)
-
-def foo(chart):
+def retrieveDrawdowns(chart):
     res = pd.Series()
     flag = False
     prev = 0
@@ -337,6 +342,8 @@ def getYearlyReport(chart):
                 year = chart.index[q].strftime('%Y-%m')
     firstYear = (int(KYearsArray[0][1]) - chart[0]) / int(B)
     yearlyReport.append((chart.index[0], firstYear))
+    if len(KYearsArray) == 1:
+        KY2 = KYearsArray[0][1]
     for w in range(1, len(KYearsArray)):
         KY2 = KYearsArray[w][1]
         KY1 = KYearsArray[w - 1][1]
@@ -368,10 +375,8 @@ def getMonthlyChart(workbook, worksheet, yieldArray):
         worksheet.write_number(row, col + 1, value)
         row += 1
         bm += 1
-
     worksheet.write_string(3, 14, "MEAN:")
     worksheet.write_number(3, 15, (sum(m_values)/len(m_values)))
-
     chart.add_series({
         'values': '=Monthly Report!$B$1:$B$' + str(bm),
         'categories': '=Monthly Report!$A$1:$A$' + str(am)
@@ -401,7 +406,6 @@ def getYearlyChart(workbook, worksheet, yieldArray):
         b += 1
     worksheet.write_string(3, 14, "MEAN:")
     worksheet.write_number(3, 15, (sum(y_values)/len(y_values)))
-
     chart.add_series({
         'values': '=Yearly Report!$B$1:$B$' + str(b),
         'categories': '=Yearly Report!$A$1:$A$' + str(a)
@@ -434,18 +438,9 @@ def getDailyChart(workbook, worksheet, yieldArray):
         'categories': '=VAMI Report!$A$1:$A$' + str(a)
     })
     chart.set_size({'width': 720, 'height': 570})
-
     return chart
 
 
-def convertDeltaSeriesToCumulativeGraph(DATA):
-    GRAPHDATA = DATA.copy(True)
-    prev_date = DATA.index[0]
-    for i in range(1, len(DATA.index)):
-        date = DATA.index[i]
-        GRAPHDATA.ix[date] = GRAPHDATA.ix[prev_date] + DATA.ix[date]
-        prev_date = date
-    return GRAPHDATA
 
 def getChartWithMaximumDrowdowns(workbook, worksheet, sortedDDArray):
     firstDate = []
