@@ -16,6 +16,7 @@ import xlsxwriter
 AUTH_TOKEN = 'e6FuWkfWH9qypKzJz6sR'
 CACHE_DIR = "cache-data/"
 B = sys.argv[4]
+CURRENT_YEAR = datetime.now().year
 
 def main():
     if not os.path.exists(CACHE_DIR):
@@ -128,9 +129,13 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
             spread = spread + delta
             totalSpread = totalSpread.append(spread)
             lastValue = totalSpread[-1]
+    filteredTotalSpread = pd.Series()
+    for i in range(0, len(totalSpread)):
+        if(totalSpread.index[i].year <= int(sys.argv[3])):
+            filteredTotalSpread.set_value(totalSpread.index[i], totalSpread[i])
     if totalSpread.size == 0:
         sys.exit(-1)
-    return totalSpread
+    return filteredTotalSpread
 
 def checkIfCached(filename):
     fileNames = os.listdir(CACHE_DIR)
@@ -214,7 +219,7 @@ def getDrawdowns(chart):
     start = chart[1]
     for i in range(1, len(chart)):
         if chart[i] > start and chart[i] > chart[i-1]:
-            if chart[i] > chart[i+1]:
+            if chart[i-1] < chart[i]:
                 start = chart[i]
                 startDate = chart.index[i]
                 starts.append(startDate)
@@ -355,6 +360,168 @@ def getYearlyReport(chart):
     print('================')
     return yearlyReport
 
+def saveAllInFile(chart, drawdownArray, dd, yieldArray):
+    workbook = xlsxwriter.Workbook('reports.xlsx')
+    worksheet1 = workbook.add_worksheet("Total Cumulative Chart Report")
+    worksheet2 = workbook.add_worksheet("Maximum drawdowns Report")
+    worksheet3 = workbook.add_worksheet("All drawdowns Report")
+    worksheet4 = workbook.add_worksheet("Monthly Report")
+    worksheet5 = workbook.add_worksheet("Yearly Report")
+    worksheet6 = workbook.add_worksheet("VAMI Report")
+    worksheet7 = workbook.add_worksheet("Mean Values")
+
+    worksheet1.set_column('A:B', 10)
+    worksheet2.set_column('A:B', 10)
+    worksheet3.set_column('A:B', 10)
+    worksheet3.set_column('M:O', 10)
+    worksheet4.set_column('A:B', 10)
+    worksheet5.set_column('A:B', 10)
+    worksheet6.set_column('A:B', 10)
+    worksheet7.set_column('A:B', 10)
+    worksheet7.set_column('G:G', 24)
+    worksheet7.set_column('H:H', 9)
+    chart1 = getTCCChart(workbook, worksheet1, chart)
+    chart2 = getChartWithMaximumDrowdowns(workbook, worksheet2, dd)
+    chart3 = getChartWithAllDrawdowns(workbook, worksheet3, drawdownArray, dd)
+    chart4 = getMonthlyChart(workbook, worksheet4, yieldArray)
+    chart5 = getYearlyChart(workbook, worksheet5, yieldArray)
+    chart6 = getDailyChart(workbook, worksheet6, yieldArray)
+
+    worksheet1.insert_chart('C1', chart1)
+    worksheet2.insert_chart('D1', chart2)
+    worksheet3.insert_chart('C1', chart3)
+    worksheet4.insert_chart('C1', chart4)
+    worksheet5.insert_chart('C1', chart5)
+    worksheet6.insert_chart('C1', chart6)
+
+    merge_format = workbook.add_format({'align': 'center'})
+    worksheet7.merge_range('A1:B1', 'Monthly mean', merge_format)
+    worksheet7.merge_range('D1:E1', 'Yearly mean', merge_format)
+    worksheet7.write_string(0, 6, 'Count of positive deals:')
+    worksheet7.write_string(1, 6, 'Count of negative deals:')
+    worksheet7.write_string(2, 6, 'Mean of positive deals:')
+    worksheet7.write_string(3, 6, 'Mean of negative deals:')
+    worksheet7.write_string(4, 6, 'Percentage of positive deals:')
+    writeMonthlyMean(chart, worksheet7, workbook)
+    writeYearlyMean(chart, worksheet7, workbook)
+    writeTransactionsAmount(chart, worksheet7, workbook)
+
+    workbook.close()
+
+def getTCCChart(workbook, worksheet, tcc):
+    chart = workbook.add_chart({'type': 'line'})
+    a = 0
+    b = 0
+    row = 0
+    col = 0
+    for index in (tcc.index):
+        date = datetime.strftime(index, '%Y-%m-%d')
+        worksheet.write_string(row, col, date)
+        a += 1
+        row += 1
+    row = 0
+    for value in (tcc):
+        worksheet.write_number(row, col + 1, int(value))
+        b += 1
+        row += 1
+    chart.set_x_axis({
+        'date_axis': True
+    })
+    chart.add_series({
+        'values': '=Total Cumulative Chart Report!$B$1:$B$' + str(b),
+        'categories': '=Total Cumulative Chart Report!$A$1:$A$' + str(a)
+    })
+    chart.set_y_axis({
+        'major_gridlines': {
+            'visible': True,
+            'line': {'width': 1.25, 'dash_type': 'dash'}
+        }
+    })
+    chart.set_size({'width': 720, 'height': 570})
+    return chart
+
+
+def getChartWithMaximumDrowdowns(workbook, worksheet, sortedDDArray):
+    firstDate = []
+    secondDate = []
+    delta = []
+    sortedDDArray = sorted(sortedDDArray, key=lambda x: x[2])[-5:]
+    chart = workbook.add_chart({'type': 'column'})
+    for i in range(0, len(sortedDDArray)):
+        firstDate.append(sortedDDArray[i][0])
+        secondDate.append(sortedDDArray[i][1])
+        delta.append(sortedDDArray[i][2])
+    col = 0
+    row = 0
+    for date1 in firstDate:
+        dateLeft = datetime.strftime(date1, '%Y-%m-%d')
+        worksheet.write_string(row, col, dateLeft)
+        row += 1
+    row = 0
+    for date2 in secondDate:
+        dateRight = datetime.strftime(date2, '%Y-%m-%d')
+        worksheet.write_string(row, col + 1, dateRight)
+        row += 1
+    row = 0
+    for d in delta:
+        worksheet.write_number(row, col + 2, int(-d))
+        row += 1
+    chart.add_series({
+        'values': '=Maximum drawdowns Report!$C$1:$C$5',
+        'categories': '=Maximum drawdowns Report!$A$1:$A$5'
+    })
+    chart.set_size({'width': 600, 'height': 470})
+    return chart
+
+def getChartWithAllDrawdowns(workbook, worksheet, sortedDDArray, dd):
+    chart = workbook.add_chart({'type': 'area'})
+    firstDate = []
+    secondDate = []
+    delta = []
+    for i in range(0, len(dd)):
+        firstDate.append(dd[i][0])
+        secondDate.append(dd[i][1])
+        delta.append(dd[i][2])
+    writeArrayOFAllDDs(firstDate, secondDate, delta, worksheet)
+    col = 0
+    row = 0
+    a = 0
+    c = 0
+    for date1 in (sortedDDArray.index):
+        dateLeft = datetime.strftime(date1, '%Y-%m-%d')
+        worksheet.write_string(row, col, dateLeft)
+        row += 1
+        a += 1
+    row = 0
+    for d in (sortedDDArray):
+        worksheet.write_number(row, col + 1, int(d))
+        row += 1
+        c += 1
+    chart.add_series({
+        'values': '=All drawdowns Report!$B$1:$B$' + str(c),
+        'categories': '=All drawdowns Report!$A$1:$A$' + str(a)
+    })
+    chart.set_size({'width': 600, 'height': 470})
+    return chart
+
+def writeArrayOFAllDDs(firstDate, secondDate, delta, worksheet):
+    row = 0
+    col = 12
+
+    for date1 in firstDate:
+        dateLeft = datetime.strftime(date1, '%Y-%m-%d')
+        worksheet.write_string(row, col, dateLeft)
+        row += 1
+    row = 0
+    for date2 in secondDate:
+        dateRight = datetime.strftime(date2, '%Y-%m-%d')
+        worksheet.write_string(row, col+1, dateRight)
+        row += 1
+    row = 0
+    for d in delta:
+        worksheet.write_number(row, col + 2, int(-d))
+        row += 1
+
 def getMonthlyChart(workbook, worksheet, yieldArray):
     m_dates = []
     m_values = []
@@ -440,154 +607,71 @@ def getDailyChart(workbook, worksheet, yieldArray):
     chart.set_size({'width': 720, 'height': 570})
     return chart
 
-
-
-def getChartWithMaximumDrowdowns(workbook, worksheet, sortedDDArray):
-    firstDate = []
-    secondDate = []
-    delta = []
-    sortedDDArray = sorted(sortedDDArray, key=lambda x: x[2])[-5:]
-    chart = workbook.add_chart({'type': 'column'})
-    for i in range(0, len(sortedDDArray)):
-        firstDate.append(sortedDDArray[i][0])
-        secondDate.append(sortedDDArray[i][1])
-        delta.append(sortedDDArray[i][2])
+def writeMonthlyMean(chart, worksheet7, workbook):
+    dates = []
+    values = []
+    by = lambda x: lambda y: getattr(y, x)
+    monthlyMean = chart.groupby([by('year'), by('month')]).apply(lambda x: np.mean(x))
+    format = workbook.add_format()
+    format.set_num_format('0.00')
+    for i in range(0, len(monthlyMean)):
+        values.append(monthlyMean[i])
+        dates.append(str(monthlyMean.index[i][0])+'/'+str(monthlyMean.index[i][1]))
+    row = 1
     col = 0
-    row = 0
-    for date1 in firstDate:
-        dateLeft = datetime.strftime(date1, '%Y-%m-%d')
-        worksheet.write_string(row, col, dateLeft)
+    for d in dates:
+        worksheet7.write_string(row, col, d)
         row += 1
-    row = 0
-    for date2 in secondDate:
-        dateRight = datetime.strftime(date2, '%Y-%m-%d')
-        worksheet.write_string(row, col + 1, dateRight)
-        row += 1
-    row = 0
-    for d in delta:
-        worksheet.write_number(row, col + 2, int(-d))
-        row += 1
-    chart.add_series({
-        'values': '=Maximum drawdowns Report!$C$1:$C$5',
-        'categories': '=Maximum drawdowns Report!$A$1:$A$5'
-    })
-    chart.set_size({'width': 600, 'height': 470})
-    return chart
-
-def getChartWithAllDrawdowns(workbook, worksheet, sortedDDArray, dd):
-    chart = workbook.add_chart({'type': 'area'})
-    firstDate = []
-    secondDate = []
-    delta = []
-    for i in range(0, len(dd)):
-        firstDate.append(dd[i][0])
-        secondDate.append(dd[i][1])
-        delta.append(dd[i][2])
-    writeArrayOFAllDDs(firstDate, secondDate, delta, worksheet)
-    col = 0
-    row = 0
-    a = 0
-    c = 0
-    for date1 in (sortedDDArray.index):
-        dateLeft = datetime.strftime(date1, '%Y-%m-%d')
-        worksheet.write_string(row, col, dateLeft)
-        row += 1
-        a += 1
-    row = 0
-    for d in (sortedDDArray):
-        worksheet.write_number(row, col + 1, int(d))
-        row += 1
-        c += 1
-    chart.add_series({
-        'values': '=All drawdowns Report!$B$1:$B$' + str(c),
-        'categories': '=All drawdowns Report!$A$1:$A$' + str(a)
-    })
-    chart.set_size({'width': 600, 'height': 470})
-    return chart
-
-def writeArrayOFAllDDs(firstDate, secondDate, delta, worksheet):
-    row = 0
-    col = 12
-
-    for date1 in firstDate:
-        dateLeft = datetime.strftime(date1, '%Y-%m-%d')
-        worksheet.write_string(row, col, dateLeft)
-        row += 1
-    row = 0
-    for date2 in secondDate:
-        dateRight = datetime.strftime(date2, '%Y-%m-%d')
-        worksheet.write_string(row, col+1, dateRight)
-        row += 1
-    row = 0
-    for d in delta:
-        worksheet.write_number(row, col + 2, int(-d))
+    row = 1
+    for v in values:
+        worksheet7.write_number(row, col+1, v, format)
         row += 1
 
-def getTCCChart(workbook, worksheet, tcc):
-    chart = workbook.add_chart({'type': 'line'})
-    a = 0
-    b = 0
-    row = 0
-    col = 0
-    for index in (tcc.index):
-        date = datetime.strftime(index, '%Y-%m-%d')
-        worksheet.write_string(row, col, date)
-        a += 1
+def writeYearlyMean(chart, worksheet7, workbook):
+    values = []
+    dates = []
+    by = lambda x: lambda y: getattr(y, x)
+    yearlyMean = chart.groupby([by('year')]).apply(lambda x: np.mean(x))
+    format = workbook.add_format()
+    format.set_num_format('0.00')
+    for i in range(0, len(yearlyMean)):
+        dates.append(str(yearlyMean.index[i]))
+        values.append(yearlyMean[yearlyMean.index[i]])
+    row = 1
+    col = 3
+    for d in dates:
+        worksheet7.write_string(row, col, d)
         row += 1
-    row = 0
-    for value in (tcc):
-        worksheet.write_number(row, col + 1, int(value))
-        b += 1
+    row = 1
+    for v in values:
+        worksheet7.write_number(row, col+1, v, format)
         row += 1
-    chart.set_x_axis({
-        'date_axis': True
-    })
-    chart.add_series({
-        'values': '=Total Cumulative Chart Report!$B$1:$B$' + str(b),
-        'categories': '=Total Cumulative Chart Report!$A$1:$A$' + str(a)
-    })
-    chart.set_y_axis({
-        'major_gridlines': {
-            'visible': True,
-            'line': {'width': 1.25, 'dash_type': 'dash'}
-        }
-    })
-    chart.set_size({'width': 720, 'height': 570})
-    return chart
 
-def saveAllInFile(chart, drawdownArray, dd, yieldArray):
-    workbook = xlsxwriter.Workbook('reports.xlsx')
-    worksheet1 = workbook.add_worksheet("Total Cumulative Chart Report")
-    worksheet2 = workbook.add_worksheet("Maximum drawdowns Report")
-    worksheet3 = workbook.add_worksheet("All drawdowns Report")
-    worksheet4 = workbook.add_worksheet("Monthly Report")
-    worksheet5 = workbook.add_worksheet("Yearly Report")
-    worksheet6 = workbook.add_worksheet("VAMI Report")
+def writeTransactionsAmount(chart, worksheet7, workbook):
+    pos = 0
+    neg = 0
+    positives = []
+    negatives = []
+    for i in range(0, len(chart)):
+        if chart[i] >= 0:
+            pos += 1
+            positives.append(chart[i])
+        else:
+            neg += 1
+            negatives.append(chart[i])
 
-    worksheet1.set_column('A:B', 10)
-    worksheet2.set_column('A:B', 10)
-    worksheet3.set_column('A:B', 10)
-    worksheet3.set_column('M:O', 10)
-    worksheet4.set_column('A:B', 10)
-    worksheet5.set_column('A:B', 10)
-    worksheet6.set_column('A:B', 10)
-
-    chart1 = getTCCChart(workbook, worksheet1, chart)
-    chart2 = getChartWithMaximumDrowdowns(workbook, worksheet2, dd)
-    chart3 = getChartWithAllDrawdowns(workbook, worksheet3, drawdownArray, dd)
-    chart4 = getMonthlyChart(workbook, worksheet4, yieldArray)
-    chart5 = getYearlyChart(workbook, worksheet5, yieldArray)
-    chart6 = getDailyChart(workbook, worksheet6, yieldArray)
-
-    worksheet1.insert_chart('C1', chart1)
-    worksheet2.insert_chart('D1', chart2)
-    worksheet3.insert_chart('C1', chart3)
-    worksheet4.insert_chart('C1', chart4)
-    worksheet5.insert_chart('C1', chart5)
-    worksheet6.insert_chart('C1', chart6)
-
-    workbook.close()
-
+    format = workbook.add_format()
+    format.set_num_format('0.00%')
+    format1 = workbook.add_format()
+    format1.set_num_format('0.00')
+    worksheet7.write_number(0, 7, pos)
+    worksheet7.write_number(1, 7, neg)
+    worksheet7.write_number(2, 7, (sum(positives)/len(positives)), format1)
+    if len(negatives) == 0:
+        worksheet7.write_number(3, 7, 0)
+    else:
+        worksheet7.write_number(3, 7, (sum(negatives)/len(negatives)), format1)
+    worksheet7.write_number(4, 7, (pos/len(chart)), format)
 
 def showPlot(totalCumulativeChart):
     def format_date(x, pos=None):
