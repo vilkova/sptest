@@ -240,6 +240,8 @@ def retrieveDrawdowns(chart):
 def getMAximumDDs(res):
     startFlag = True
     result = []
+    if res[-1] != 0:
+        res[-1] = 0
     for i in range(1, len(res)):
         if startFlag:
                 if res[i-1] == 0 and res[i] != 0:
@@ -381,12 +383,14 @@ def saveAllInFile(chart, drawdownArray, dd, yieldArray, pos, neg, positives, neg
     worksheet7.write_string(4, 0, 'Percentage of positive deals:')
     worksheet7.write_string(5, 0, 'Mean of all deals:')
     worksheet7.write_string(6, 0, 'Total profit:')
-    worksheet7.write_string(7, 0, 'Positives + negatives:')
+    worksheet7.write_string(7, 0, 'Total trades:')
     worksheet7.write_string(8, 0, 'Ratio:')
     worksheet7.write_string(9, 0, 'Gross profit:')
     worksheet7.write_string(10, 0, 'Gross loss:')
     worksheet7.write_string(11, 0, 'Profit factor:')
-
+    worksheet7.write_string(12, 0, 'Daily standard deviation:')
+    worksheet7.write_string(13, 0, 'Monthly standard deviation:')
+    worksheet7.write_string(14, 0, 'Yearly standard deviation:')
     writeTransactionsAmount(positives, negatives, worksheet7, workbook, pos, neg, chart)
 
     workbook.close()
@@ -629,7 +633,18 @@ def writeYearlyMean(chart, worksheet7, workbook):
         worksheet7.write_number(row, col+1, v, format)
         row += 1
 
-def writeTransactionsAmount(positiveSeries, negativeSeries, worksheet7, workbook, pos, neg, chart):
+def writeTransactionsAmount(positiveSeries, negativeSeries, w_sheet, w_book, pos, neg, chart):
+
+    def stdev(x):
+       return sqrt(sum((x - mean(x))**2)/(len(x)-1))
+
+    monthValue = pd.Series()
+    yearValue = pd.Series()
+    lastValue = chart[-1]
+    lastDate = chart.index[-1]
+    month = chart.index[0].strftime('%Y-%m')
+    year = chart.index[0].strftime('%Y')
+
     negativeValue = 0
     positiveValue = 0
     positiveMean = 0
@@ -639,30 +654,49 @@ def writeTransactionsAmount(positiveSeries, negativeSeries, worksheet7, workbook
     for j in range(0, len(negativeSeries)):
         negativeValue += negativeSeries[j]
 
-    format = workbook.add_format()
+    format = w_book.add_format()
     format.set_num_format('0.00%')
-    format1 = workbook.add_format()
+    format1 = w_book.add_format()
     format1.set_num_format('0.00')
-    worksheet7.write_number(0, 1, pos)
-    worksheet7.write_number(1, 1, neg)
+    w_sheet.write_number(0, 1, pos)
+    w_sheet.write_number(1, 1, neg)
     if len(positiveSeries) == 0:
-        worksheet7.write_number(2, 1, 0, format1)
+        w_sheet.write_number(2, 1, 0, format1)
     else:
-        positiveMean = positiveValue/len(positiveSeries)
-        worksheet7.write_number(2, 1, positiveMean, format1)
+        w_sheet.write_number(2, 1, mean(positiveSeries), format1)
     if len(negativeSeries) == 0:
-        worksheet7.write_number(3, 1, 0, format1)
+        w_sheet.write_number(3, 1, 0, format1)
     else:
-        negativeMean = negativeValue/len(negativeSeries)
-        worksheet7.write_number(3, 1, negativeMean, format1)
-    worksheet7.write_number(4, 1, (pos/(len(positiveSeries)+len(negativeSeries))), format)
-    worksheet7.write_number(5, 1, (positiveValue+negativeValue)/(len(positiveSeries)+len(negativeSeries)), format1)
-    worksheet7.write_number(6, 1, chart[-1], format1)
-    worksheet7.write_number(7, 1, sum(positiveValue + negativeValue), format1)
-    worksheet7.write_number(8, 1, (positiveMean/negativeMean), format1)
-    worksheet7.write_number(9, 1, positiveValue, format1)
-    worksheet7.write_number(10, 1, negativeValue, format1)
-    worksheet7.write_number(11, 1, positiveValue/negativeValue, format1)
+        w_sheet.write_number(3, 1, mean(negativeSeries), format1)
+    w_sheet.write_number(4, 1, (pos/(len(positiveSeries)+len(negativeSeries))), format)
+    w_sheet.write_number(5, 1, (positiveValue+negativeValue)/(len(positiveSeries)+len(negativeSeries)), format1)
+    w_sheet.write_number(6, 1, chart[-1], format1)
+    w_sheet.write_number(7, 1, sum(positiveValue + negativeValue), format1)
+    if negativeMean == 0:
+        w_sheet.write_number(8, 1, 0)
+    else:
+        w_sheet.write_number(8, 1, positiveMean/negativeMean, format1)
+    w_sheet.write_number(9, 1, positiveValue, format1)
+    w_sheet.write_number(10, 1, negativeValue, format1)
+    if negativeValue == 0:
+        w_sheet.write_number(11, 1, 0)
+    else:
+        w_sheet.write_number(11, 1, positiveValue/negativeValue, format1)
+    w_sheet.write_number(12, 1, stdev(chart), format1)
+    for o in range(1, len(chart)):
+        if chart.index[o].strftime('%Y-%m') > month:
+            if chart.index[o].strftime('%Y-%m') > chart.index[o - 1].strftime('%Y-%m'):
+                monthValue.set_value(chart.index[o-1], chart[o-1])
+                month = chart.index[o].strftime('%Y-%m')
+    for r in range(1, len(chart)):
+        if chart.index[r].strftime('%Y') > year:
+            if chart.index[r].strftime('%Y') > chart.index[r - 1].strftime('%Y'):
+                yearValue.set_value(chart.index[r-1], chart[r-1])
+                year = chart.index[r].strftime('%Y-%m')
+    monthValue.set_value(lastDate, lastValue)
+    yearValue.set_value(lastDate, lastValue)
+    w_sheet.write_number(13, 1, stdev(monthValue), format1)
+    w_sheet.write_number(14, 1, stdev(yearValue), format1)
 
 def showPlot(totalCumulativeChart):
     def format_date(x, pos=None):
