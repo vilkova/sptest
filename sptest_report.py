@@ -23,19 +23,32 @@ def main():
         os.makedirs(CACHE_DIR)
     table = retrieveTableFromExcel()
     spread1Delta = getSpreadDelta(table[1])
+    pos = spread1Delta[1][1]
+    neg = spread1Delta[1][2]
+    positives = spread1Delta[1][3]
+    negatives = spread1Delta[1][4]
     if len(table) == 2:
-        totalSpreadDelta = spread1Delta
+        totalSpreadDelta = spread1Delta[0]
     else:
         spread2Delta = getSpreadDelta(table[2])
-        totalSpreadDelta = spread1Delta.add(spread2Delta, fill_value=0)
+        pos += spread2Delta[1][1]
+        neg += spread2Delta[1][2]
+        positives = positives.append(spread2Delta[1][3])
+        negatives = negatives.append(spread2Delta[1][4])
+        totalSpreadDelta = spread1Delta[0].add(spread2Delta[0], fill_value=0)
         for i in range(0, 3):
             del table[0]
         for row in table:
-            totalSpreadDelta = totalSpreadDelta.add(getSpreadDelta(row), fill_value=0)
+            spread = getSpreadDelta(row)
+            pos += spread[1][1]
+            neg += spread[1][2]
+            positives = positives.append(spread[1][3])
+            negatives = negatives.append(spread[1][4])
+            totalSpreadDelta = totalSpreadDelta.add(spread[0], fill_value=0)
     totalCumulativeChart = convertDeltaSeriesToCumulativeGraph(totalSpreadDelta)
-    saveReports(totalCumulativeChart)
     print("Total Cumulative Chart:")
     print(totalCumulativeChart.astype(int))
+    saveReports(totalCumulativeChart, pos, neg, positives, negatives)
     showPlot(totalCumulativeChart)
 
 def retrieveTableFromExcel():
@@ -76,7 +89,8 @@ def getSpreadDelta(row):
                          int(row[5][:4].decode("utf-8")), int(row[6][:4].decode("utf-8")), int(row[3].decode("utf-8")),
                          int(row[4].decode("utf-8")), row[5].decode("utf-8"), row[6].decode("utf-8"),
                          int(row[7].decode("utf-8")), True, years)
-    return convertSpreadSeriesToDelta(spread)
+    deltaSeries = convertSpreadSeriesToDelta(spread[0])
+    return (deltaSeries, spread)
 
 def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_DATE, END_DATE, BUCK_PRICE,
                 STARTFROMZERO, years):
@@ -84,6 +98,11 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
     enddate = datetime.strptime(END_DATE, '%Y-%m-%d %H:%M:%S')
     totalSpread = pd.Series()
     lastValue = 0
+    filteredTotalSpread = pd.Series()
+    pos = 0
+    neg = 0
+    positives = pd.Series()
+    negatives = pd.Series()
     for i in years:
         year = str(i)
         price = str(BUCK_PRICE)
@@ -125,17 +144,23 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
             cache = readCacheFromFile(filename)
             spread = cache
         if STARTFROMZERO:
+            spreadForMeanReport = convertDeltaSeriesToCumulativeGraph(convertSpreadSeriesToDelta(spread - spread[0]))
             delta = lastValue - spread[0]
             spread = spread + delta
+            if spreadForMeanReport[-1] >= 0:
+                pos += 1
+                positives.set_value(spreadForMeanReport.index[-1], spreadForMeanReport[-1])
+            elif spreadForMeanReport[-1] < 0:
+                neg += 1
+                negatives.set_value(spreadForMeanReport.index[-1], spreadForMeanReport[-1])
             totalSpread = totalSpread.append(spread)
             lastValue = totalSpread[-1]
-    filteredTotalSpread = pd.Series()
     for i in range(0, len(totalSpread)):
-        if(totalSpread.index[i].year <= int(sys.argv[3])):
+        if totalSpread.index[i].year <= int(sys.argv[3]):
             filteredTotalSpread.set_value(totalSpread.index[i], totalSpread[i])
     if totalSpread.size == 0:
         sys.exit(-1)
-    return filteredTotalSpread
+    return (filteredTotalSpread, pos, neg, positives, negatives)
 
 def checkIfCached(filename):
     fileNames = os.listdir(CACHE_DIR)
@@ -176,14 +201,13 @@ def convertDeltaSeriesToCumulativeGraph(DATA):
         prev_date = date
     return GRAPHDATA
 
-def saveReports(totalCumulativeChart):
-    dd = getDrawdowns(totalCumulativeChart)
-    drawdownArray = retrieveDrawdowns(totalCumulativeChart)
+def saveReports(totalCumulativeChart, pos, neg, positives, negatives):
+    result = retrieveDrawdowns(totalCumulativeChart)
     print('================')
-    print('Maximum drawdowns: \n', sorted(dd, key=lambda x: x)[-5:], '\n')
+    print('Maximum drawdowns: \n', sorted(result[1], key=lambda x: x[2])[:5], '\n')
     print('================')
     yieldArray = getYieldArray(totalCumulativeChart)
-    saveAllInFile(totalCumulativeChart, drawdownArray, dd, yieldArray)
+    saveAllInFile(totalCumulativeChart, result[0], result[1], yieldArray, pos, neg, positives, negatives)
 
 def retrieveDrawdowns(chart):
     res = pd.Series()
@@ -210,69 +234,24 @@ def retrieveDrawdowns(chart):
                 ind = chart.index[i]
                 res.set_value(ind, chart[i] - prev)
                 flag = True
-    return res
+    res1 = getMAximumDDs(res)
+    return (res,res1)
 
-def getDrawdowns(chart):
-    filteredDDs = getMaxDrawdowns(chart)
-    starts = []
-    ends = []
-    start = chart[1]
-    for i in range(1, len(chart)):
-        if chart[i] > start and chart[i] > chart[i-1]:
-            if chart[i-1] < chart[i]:
-                start = chart[i]
-                startDate = chart.index[i]
-                starts.append(startDate)
-            if chart[i] >= start:
-                    endDate = chart.index[i]
-                    ends.append(endDate)
-    return mix_dd(filteredDDs, ends)
-
-def mix_dd(filteredDDs, ends):
-    dates = []
-    for i in range(0, len(filteredDDs)):
-        startDate = filteredDDs[i][0]
-        for j in range(1, len(ends)):
-            if filteredDDs[i][0] < ends[j]:
-                endDate = ends[j]
-                dates.append((startDate, endDate, filteredDDs[i][2]))
-                break
-    return dates
-
-def getMaxDrawdowns(totalCumulativeChart):
-    maxValue = 0
-    drawdownArray = []
-    keyLeft = totalCumulativeChart.index[0]
-    keyRight = totalCumulativeChart.index[0]
-    for i in range(1, len(totalCumulativeChart) - 1):
-        if totalCumulativeChart[i] > totalCumulativeChart[i - 1] and totalCumulativeChart[i] >= \
-                totalCumulativeChart[i + 1]:
-            if totalCumulativeChart[i] > maxValue:
-                maxValue = totalCumulativeChart[i]
-                keyRight = totalCumulativeChart.index[i]
-        if totalCumulativeChart[i] < totalCumulativeChart[i - 1] and totalCumulativeChart[i] < totalCumulativeChart[
-                    i + 1]:
-            keyLeft = totalCumulativeChart.index[i]
-            drawdownArray.append((keyRight, keyLeft, totalCumulativeChart[keyRight], totalCumulativeChart[keyLeft]))
-    return filterDrawdowns(drawdownArray)
-
-def filterDrawdowns(dd):
-    keyMax = dd[0][0]
-    keyMin = dd[0][1]
-    maxValue = dd[0][2]
-    minValue = dd[0][3]
-    drawndowns = []
-    for i in range(1, len(dd)):
-        if dd[i][2] > maxValue:
-            drawndowns.append((keyMax, keyMin, maxValue - minValue))
-            keyMax = dd[i][0]
-            keyMin = dd[i][1]
-            maxValue = dd[i][2]
-            minValue = dd[i][3]
-        elif minValue > dd[i][3]:
-            keyMin = dd[i][1]
-            minValue = dd[i][3]
-    return drawndowns
+def getMAximumDDs(res):
+    startFlag = True
+    result = []
+    for i in range(1, len(res)):
+        if startFlag:
+                if res[i-1] == 0 and res[i] != 0:
+                    startDate = res.index[i-1]
+                    startFlag = False
+        else:
+            if res[i] == 0 and res[i-1] != 0:
+                endDate = res.index[i]
+                value = min(res.truncate(startDate, endDate))
+                result.append((startDate, endDate, value))
+                startFlag = True
+    return result
 
 def getYieldArray(chart):
     yieldReport = []
@@ -360,7 +339,7 @@ def getYearlyReport(chart):
     print('================')
     return yearlyReport
 
-def saveAllInFile(chart, drawdownArray, dd, yieldArray):
+def saveAllInFile(chart, drawdownArray, dd, yieldArray, pos, neg, positives, negatives):
     workbook = xlsxwriter.Workbook('reports.xlsx')
     worksheet1 = workbook.add_worksheet("Total Cumulative Chart Report")
     worksheet2 = workbook.add_worksheet("Maximum drawdowns Report")
@@ -377,16 +356,14 @@ def saveAllInFile(chart, drawdownArray, dd, yieldArray):
     worksheet4.set_column('A:B', 10)
     worksheet5.set_column('A:B', 10)
     worksheet6.set_column('A:B', 10)
-    worksheet7.set_column('A:B', 10)
-    worksheet7.set_column('G:G', 24)
-    worksheet7.set_column('H:H', 9)
+    worksheet7.set_column('A:A', 24)
+    worksheet7.set_column('B:B', 10)
     chart1 = getTCCChart(workbook, worksheet1, chart)
     chart2 = getChartWithMaximumDrowdowns(workbook, worksheet2, dd)
     chart3 = getChartWithAllDrawdowns(workbook, worksheet3, drawdownArray, dd)
     chart4 = getMonthlyChart(workbook, worksheet4, yieldArray)
     chart5 = getYearlyChart(workbook, worksheet5, yieldArray)
     chart6 = getDailyChart(workbook, worksheet6, yieldArray)
-
     worksheet1.insert_chart('C1', chart1)
     worksheet2.insert_chart('D1', chart2)
     worksheet3.insert_chart('C1', chart3)
@@ -394,17 +371,23 @@ def saveAllInFile(chart, drawdownArray, dd, yieldArray):
     worksheet5.insert_chart('C1', chart5)
     worksheet6.insert_chart('C1', chart6)
 
-    merge_format = workbook.add_format({'align': 'center'})
-    worksheet7.merge_range('A1:B1', 'Monthly mean', merge_format)
-    worksheet7.merge_range('D1:E1', 'Yearly mean', merge_format)
-    worksheet7.write_string(0, 6, 'Count of positive deals:')
-    worksheet7.write_string(1, 6, 'Count of negative deals:')
-    worksheet7.write_string(2, 6, 'Mean of positive deals:')
-    worksheet7.write_string(3, 6, 'Mean of negative deals:')
-    worksheet7.write_string(4, 6, 'Percentage of positive deals:')
-    writeMonthlyMean(chart, worksheet7, workbook)
-    writeYearlyMean(chart, worksheet7, workbook)
-    writeTransactionsAmount(chart, worksheet7, workbook)
+    # merge_format = workbook.add_format({'align': 'center'})
+    # worksheet7.merge_range('A1:B1', 'Monthly mean', merge_format)
+    # worksheet7.merge_range('D1:E1', 'Yearly mean', merge_format)
+    worksheet7.write_string(0, 0, 'Count of positive deals:')
+    worksheet7.write_string(1, 0, 'Count of negative deals:')
+    worksheet7.write_string(2, 0, 'Mean of positive deals:')
+    worksheet7.write_string(3, 0, 'Mean of negative deals:')
+    worksheet7.write_string(4, 0, 'Percentage of positive deals:')
+    worksheet7.write_string(5, 0, 'Mean of all deals:')
+    worksheet7.write_string(6, 0, 'Total profit:')
+    worksheet7.write_string(7, 0, 'Positives + negatives:')
+    worksheet7.write_string(8, 0, 'Ratio:')
+    worksheet7.write_string(9, 0, 'Gross profit:')
+    worksheet7.write_string(10, 0, 'Gross loss:')
+    worksheet7.write_string(11, 0, 'Profit factor:')
+
+    writeTransactionsAmount(positives, negatives, worksheet7, workbook, pos, neg, chart)
 
     workbook.close()
 
@@ -440,12 +423,11 @@ def getTCCChart(workbook, worksheet, tcc):
     chart.set_size({'width': 720, 'height': 570})
     return chart
 
-
-def getChartWithMaximumDrowdowns(workbook, worksheet, sortedDDArray):
+def getChartWithMaximumDrowdowns(workbook, worksheet, dd):
     firstDate = []
     secondDate = []
     delta = []
-    sortedDDArray = sorted(sortedDDArray, key=lambda x: x[2])[-5:]
+    sortedDDArray = sorted(dd, key=lambda x: x[2])[:5]
     chart = workbook.add_chart({'type': 'column'})
     for i in range(0, len(sortedDDArray)):
         firstDate.append(sortedDDArray[i][0])
@@ -464,7 +446,7 @@ def getChartWithMaximumDrowdowns(workbook, worksheet, sortedDDArray):
         row += 1
     row = 0
     for d in delta:
-        worksheet.write_number(row, col + 2, int(-d))
+        worksheet.write_number(row, col + 2, int(d))
         row += 1
     chart.add_series({
         'values': '=Maximum drawdowns Report!$C$1:$C$5',
@@ -519,7 +501,7 @@ def writeArrayOFAllDDs(firstDate, secondDate, delta, worksheet):
         row += 1
     row = 0
     for d in delta:
-        worksheet.write_number(row, col + 2, int(-d))
+        worksheet.write_number(row, col + 2, int(d))
         row += 1
 
 def getMonthlyChart(workbook, worksheet, yieldArray):
@@ -647,31 +629,40 @@ def writeYearlyMean(chart, worksheet7, workbook):
         worksheet7.write_number(row, col+1, v, format)
         row += 1
 
-def writeTransactionsAmount(chart, worksheet7, workbook):
-    pos = 0
-    neg = 0
-    positives = []
-    negatives = []
-    for i in range(0, len(chart)):
-        if chart[i] >= 0:
-            pos += 1
-            positives.append(chart[i])
-        else:
-            neg += 1
-            negatives.append(chart[i])
+def writeTransactionsAmount(positiveSeries, negativeSeries, worksheet7, workbook, pos, neg, chart):
+    negativeValue = 0
+    positiveValue = 0
+    positiveMean = 0
+    negativeMean = 0
+    for i in range(0, len(positiveSeries)):
+        positiveValue += positiveSeries[i]
+    for j in range(0, len(negativeSeries)):
+        negativeValue += negativeSeries[j]
 
     format = workbook.add_format()
     format.set_num_format('0.00%')
     format1 = workbook.add_format()
     format1.set_num_format('0.00')
-    worksheet7.write_number(0, 7, pos)
-    worksheet7.write_number(1, 7, neg)
-    worksheet7.write_number(2, 7, (sum(positives)/len(positives)), format1)
-    if len(negatives) == 0:
-        worksheet7.write_number(3, 7, 0)
+    worksheet7.write_number(0, 1, pos)
+    worksheet7.write_number(1, 1, neg)
+    if len(positiveSeries) == 0:
+        worksheet7.write_number(2, 1, 0, format1)
     else:
-        worksheet7.write_number(3, 7, (sum(negatives)/len(negatives)), format1)
-    worksheet7.write_number(4, 7, (pos/len(chart)), format)
+        positiveMean = positiveValue/len(positiveSeries)
+        worksheet7.write_number(2, 1, positiveMean, format1)
+    if len(negativeSeries) == 0:
+        worksheet7.write_number(3, 1, 0, format1)
+    else:
+        negativeMean = negativeValue/len(negativeSeries)
+        worksheet7.write_number(3, 1, negativeMean, format1)
+    worksheet7.write_number(4, 1, (pos/(len(positiveSeries)+len(negativeSeries))), format)
+    worksheet7.write_number(5, 1, (positiveValue+negativeValue)/(len(positiveSeries)+len(negativeSeries)), format1)
+    worksheet7.write_number(6, 1, chart[-1], format1)
+    worksheet7.write_number(7, 1, sum(positiveValue + negativeValue), format1)
+    worksheet7.write_number(8, 1, (positiveMean/negativeMean), format1)
+    worksheet7.write_number(9, 1, positiveValue, format1)
+    worksheet7.write_number(10, 1, negativeValue, format1)
+    worksheet7.write_number(11, 1, positiveValue/negativeValue, format1)
 
 def showPlot(totalCumulativeChart):
     def format_date(x, pos=None):
