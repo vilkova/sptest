@@ -361,8 +361,10 @@ def saveAllInFile(chart, drawdownArray, dd, yieldArray, pos, neg, positives, neg
     worksheet6.set_column('A:B', 10)
     worksheet7.set_column('A:A', 24)
     worksheet7.set_column('B:B', 10)
-    worksheet7.set_column('D:D', 20)
-    worksheet7.set_column('E:E', 12)
+    worksheet7.set_column('D:D', 19)
+    worksheet7.set_column('E:E', 13)
+    worksheet7.set_column('G:G', 19)
+    worksheet7.set_column('H:H', 22)
     worksheet8.set_column('A:B', 10)
     chart1 = getTCCChart(workbook, worksheet1, chart)
     chart2 = getChartWithMaximumDrowdowns(workbook, worksheet2, dd)
@@ -399,25 +401,34 @@ def saveAllInFile(chart, drawdownArray, dd, yieldArray, pos, neg, positives, neg
     worksheet7.write_string(0, 3, 'Daily stdev:')
     worksheet7.write_string(1, 3, 'Monthly stdev:')
     worksheet7.write_string(2, 3, 'Yearly stdev:')
-    worksheet7.write_string(3, 3, 'Average monthly yield:')
-    worksheet7.write_string(4, 3, 'Average yearly yield:')
-    worksheet7.write_string(5, 3, 'Daily average gain:')
-    worksheet7.write_string(6, 3, 'Monthly average gain:')
-    worksheet7.write_string(7, 3, 'Yearly average gain:')
-    worksheet7.write_string(8, 3, 'Daily average loss:')
-    worksheet7.write_string(9, 3, 'Monthly average loss:')
-    worksheet7.write_string(10, 3, 'Yearly average loss:')
-    worksheet7.write_string(11, 3, 'Daily stdev gain:')
-    worksheet7.write_string(12, 3, 'Monthly stdev gain:')
-    worksheet7.write_string(13, 3, 'Yearly stdev gain:')
-    worksheet7.write_string(14, 3, 'Daily stdev loss:')
-    worksheet7.write_string(15, 3, 'Monthly stdev loss:')
-    worksheet7.write_string(16, 3, 'Yearly stdev loss:')
-    worksheet7.write_string(17, 3, 'Daily avg gain/avg:')
-    worksheet7.write_string(18, 3, 'Monthly avg gain/avg:')
-    worksheet7.write_string(19, 3, 'Yearly avg gain/avg:')
+    worksheet7.write_string(3, 3, 'Average daily yield:')
+    worksheet7.write_string(4, 3, 'Average monthly yield:')
+    worksheet7.write_string(5, 3, 'Average yearly yield:')
+    worksheet7.write_string(6, 3, 'Daily average gain:')
+    worksheet7.write_string(7, 3, 'Monthly average gain:')
+    worksheet7.write_string(8, 3, 'Yearly average gain:')
+    worksheet7.write_string(9, 3, 'Daily average loss:')
+    worksheet7.write_string(10, 3, 'Monthly average loss:')
+    worksheet7.write_string(11, 3, 'Yearly average loss:')
+    worksheet7.write_string(12, 3, 'Daily stdev gain:')
+    worksheet7.write_string(13, 3, 'Monthly stdev gain:')
+    worksheet7.write_string(14, 3, 'Yearly stdev gain:')
+    worksheet7.write_string(15, 3, 'Daily stdev loss:')
+    worksheet7.write_string(16, 3, 'Monthly stdev loss:')
+    worksheet7.write_string(17, 3, 'Yearly stdev loss:')
+    worksheet7.write_string(18, 3, 'Daily avg gain/avg:')
+    worksheet7.write_string(19, 3, 'Monthly avg gain/avg:')
+    worksheet7.write_string(20, 3, 'Yearly avg gain/avg:')
 
-    writeTransactionsAmount(positives, negatives, worksheet7, workbook, pos, neg, chart, yieldArray)
+    worksheet7.write_string(0, 6, 'Calmar Ratio:')
+    worksheet7.write_string(1, 6, 'Sterling Ratio:')
+    worksheet7.write_string(2, 6, 'Sharpe Ratio monthly:')
+    worksheet7.write_string(3, 6, 'Sharpe Ratio yearly:')
+    worksheet7.write_string(4, 6, 'Sharpe Ratio2 daily:')
+    worksheet7.write_string(5, 6, 'Sharpe Ratio2 monthly:')
+    worksheet7.write_string(6, 6, 'Sharpe Ratio2 yearly:')
+
+    writeTransactionsAmount(positives, negatives, worksheet7, workbook, pos, neg, chart, yieldArray, dd)
 
     workbook.close()
 
@@ -661,7 +672,7 @@ def getDistributionChart(workbook, worksheet, monthlyYield):
     hist_chart.set_size({'height': 570})
     return (distribution_chart, hist_chart)
 
-def writeTransactionsAmount(positiveSeries, negativeSeries, w_sheet, w_book, pos, neg, chart, yieldArray):
+def writeTransactionsAmount(positiveSeries, negativeSeries, w_sheet, w_book, pos, neg, chart, yieldArray, dd):
     negativeValue = 0
     positiveValue = 0
     positiveMean = 0
@@ -705,9 +716,9 @@ def writeTransactionsAmount(positiveSeries, negativeSeries, w_sheet, w_book, pos
         w_sheet.write_number(11, 1, 0)
     else:
         w_sheet.write_number(11, 1, abs(positiveValue/negativeValue), format1)
-    calculateAvgInYield(yieldArray[0][2][1], yieldArray[0][0], yieldArray[0][1], w_sheet)
+    calculateAvgInYield(yieldArray[0][2][1], yieldArray[0][0], yieldArray[0][1], w_sheet, dd, len(chart))
 
-def calculateAvgInYield(dailyYield, monthlyYield, yearlyYield, w_sheet):
+def calculateAvgInYield(dailyYield, monthlyYield, yearlyYield, w_sheet, dd, totalDaysCount):
 
     def stdev(x):
        return sqrt(sum((x - mean(x))**2)/(len(x)-1))
@@ -745,43 +756,65 @@ def calculateAvgInYield(dailyYield, monthlyYield, yearlyYield, w_sheet):
     years=[]
     for c in range(0, len(yearlyYield)):
         years.append(yearlyYield[c][1])
-    w_sheet.write_number(0, 4, stdev(dailyYield))#daily stdev
-    w_sheet.write_number(1, 4, stdev(monthes))#monthly stdev
-    w_sheet.write_number(2, 4, stdev(years))#yearly stdev
-    w_sheet.write_number(3, 4, mean(monthes))#average monthly yield
-    w_sheet.write_number(4, 4, mean(years))#average yearly yield
+    dailyStdev =  stdev(dailyYield)
+    monthlyStdev = stdev(monthes)
+    yearlyStdev = stdev(years)
+    avgDailyYield = mean(dailyYield)
+    avgMonthlyYield = mean(monthes)
+    avgYearlyYield = mean(years)
+    w_sheet.write_number(0, 4, dailyStdev)#daily stdev
+    w_sheet.write_number(1, 4, monthlyStdev)#monthly stdev
+    w_sheet.write_number(2, 4, yearlyStdev)#yearly stdev
+    w_sheet.write_number(3, 4, avgDailyYield)#average daily yield
+    w_sheet.write_number(4, 4, avgMonthlyYield)#average monthly yield
+    w_sheet.write_number(5, 4, avgYearlyYield)#average yearly yield
 
     #Daily average gain, Monthly average gain, Yearly average gain, Daily average loss, Monthly average loss, Yearly average loss
-
     dayPosMean, dayNegMean = calcMean(dailyYield)
     monthPosMean, monthNegMean = calcMean(monthes)
     yearPosMean, yearNegMean = calcMean(years)
-    w_sheet.write_number(5, 4, dayPosMean)
-    w_sheet.write_number(6, 4, monthPosMean)
-    w_sheet.write_number(7, 4, yearPosMean)
-    w_sheet.write_number(8, 4, dayNegMean)
-    w_sheet.write_number(9, 4, monthNegMean)
-    w_sheet.write_number(10, 4, yearNegMean)
+    w_sheet.write_number(6, 4, dayPosMean)
+    w_sheet.write_number(7, 4, monthPosMean)
+    w_sheet.write_number(8, 4, yearPosMean)
+    w_sheet.write_number(9, 4, dayNegMean)
+    w_sheet.write_number(10, 4, monthNegMean)
+    w_sheet.write_number(11, 4, yearNegMean)
 
-    #Standard deviations
+    #Standard deviations gain and loss
     dayPosStdev, dayNegStdev = calcStdev(dailyYield)
     monthPosStdev, monthNegStdev = calcStdev(monthes)
     yearPosStdev, yearNegStdev = calcStdev(years)
-    w_sheet.write_number(11, 4, dayPosStdev)
-    w_sheet.write_number(12, 4, monthPosStdev)
-    w_sheet.write_number(13, 4, yearPosStdev)
-    w_sheet.write_number(14, 4, dayNegStdev)
-    w_sheet.write_number(15, 4, monthNegStdev)
-    w_sheet.write_number(16, 4, yearNegStdev)
+    w_sheet.write_number(12, 4, dayPosStdev)
+    w_sheet.write_number(13, 4, monthPosStdev)
+    w_sheet.write_number(14, 4, yearPosStdev)
+    w_sheet.write_number(15, 4, dayNegStdev)
+    w_sheet.write_number(16, 4, monthNegStdev)
+    w_sheet.write_number(17, 4, yearNegStdev)
 
     #avg gain/avg loss
     dayRatio = calcRatio(dayPosMean, dayNegMean)
     monthRatio = calcRatio(monthPosMean, monthNegMean)
     yearRatio = calcRatio(yearPosMean, yearNegMean)
-    w_sheet.write_number(17, 4, dayRatio)
-    w_sheet.write_number(18, 4, monthRatio)
-    w_sheet.write_number(19, 4, yearRatio)
+    w_sheet.write_number(18, 4, dayRatio)
+    w_sheet.write_number(19, 4, monthRatio)
+    w_sheet.write_number(20, 4, yearRatio)
 
+    #Calmar ratio, Sterling ratio, Sharpe ratios
+    maxDD = min(dd,key=lambda x:x[2])[2]
+    calmar = abs(avgYearlyYield/maxDD)
+    sterling = avgYearlyYield/abs(maxDD - 0.1)
+    sharpeRatioYearly = (avgYearlyYield - 0.05)/yearlyStdev
+    sharpeRatioMonthly = (avgMonthlyYield - 0.0042)/monthlyStdev
+    sharpRatio2Daily = sqrt(totalDaysCount)*avgDailyYield/dailyStdev
+    sharpRatio2Monthly = sqrt(totalDaysCount)*avgMonthlyYield/monthlyStdev
+    sharpRatio2Yearly = sqrt(totalDaysCount)*avgYearlyYield/yearlyStdev
+    w_sheet.write_number(0, 7, calmar)
+    w_sheet.write_number(1, 7, sterling)
+    w_sheet.write_number(2, 7, sharpeRatioMonthly)
+    w_sheet.write_number(3, 7, sharpeRatioYearly)
+    w_sheet.write_number(4, 7, sharpRatio2Daily)
+    w_sheet.write_number(5, 7, sharpRatio2Monthly)
+    w_sheet.write_number(6, 7, sharpRatio2Yearly)
 
 def showPlot(totalCumulativeChart):
     def format_date(x, pos=None):
