@@ -291,7 +291,7 @@ def getDailyReportWithVAMI(chart):
         dailyReport.set_value(KArray[j][0], yieldValue)
     lastDay = (chart[-1] - KD2) / int(B)
     dailyReport.set_value(chart.index[-1], lastDay)
-    return getVAMI(dailyReport)
+    return (getVAMI(dailyReport), dailyReport)
 
 def getMonthlyReport(chart):
     monthlyReport = []
@@ -350,6 +350,7 @@ def saveAllInFile(chart, drawdownArray, dd, yieldArray, pos, neg, positives, neg
     worksheet5 = workbook.add_worksheet("Yearly Report")
     worksheet6 = workbook.add_worksheet("VAMI Report")
     worksheet7 = workbook.add_worksheet("Mean Values")
+    worksheet8 = workbook.add_worksheet("Norm Distribution Report")
 
     worksheet1.set_column('A:B', 10)
     worksheet2.set_column('A:B', 10)
@@ -360,18 +361,24 @@ def saveAllInFile(chart, drawdownArray, dd, yieldArray, pos, neg, positives, neg
     worksheet6.set_column('A:B', 10)
     worksheet7.set_column('A:A', 24)
     worksheet7.set_column('B:B', 10)
+    worksheet7.set_column('D:D', 20)
+    worksheet7.set_column('E:E', 12)
+    worksheet8.set_column('A:B', 10)
     chart1 = getTCCChart(workbook, worksheet1, chart)
     chart2 = getChartWithMaximumDrowdowns(workbook, worksheet2, dd)
     chart3 = getChartWithAllDrawdowns(workbook, worksheet3, drawdownArray, dd)
     chart4 = getMonthlyChart(workbook, worksheet4, yieldArray)
     chart5 = getYearlyChart(workbook, worksheet5, yieldArray)
     chart6 = getDailyChart(workbook, worksheet6, yieldArray)
+    # chart8 = getDistributionChart(workbook, worksheet8, yieldArray[0][0])
     worksheet1.insert_chart('C1', chart1)
-    worksheet2.insert_chart('D1', chart2)
+    worksheet2.insert_chart('E1', chart2)
     worksheet3.insert_chart('C1', chart3)
     worksheet4.insert_chart('C1', chart4)
     worksheet5.insert_chart('C1', chart5)
     worksheet6.insert_chart('C1', chart6)
+    # worksheet8.insert_chart('E1', chart8[0])
+    # worksheet8.insert_chart('M1', chart8[1])
 
     # merge_format = workbook.add_format({'align': 'center'})
     # worksheet7.merge_range('A1:B1', 'Monthly mean', merge_format)
@@ -388,10 +395,29 @@ def saveAllInFile(chart, drawdownArray, dd, yieldArray, pos, neg, positives, neg
     worksheet7.write_string(9, 0, 'Gross profit:')
     worksheet7.write_string(10, 0, 'Gross loss:')
     worksheet7.write_string(11, 0, 'Profit factor:')
-    worksheet7.write_string(12, 0, 'Daily standard deviation:')
-    worksheet7.write_string(13, 0, 'Monthly standard deviation:')
-    worksheet7.write_string(14, 0, 'Yearly standard deviation:')
-    writeTransactionsAmount(positives, negatives, worksheet7, workbook, pos, neg, chart)
+
+    worksheet7.write_string(0, 3, 'Daily stdev:')
+    worksheet7.write_string(1, 3, 'Monthly stdev:')
+    worksheet7.write_string(2, 3, 'Yearly stdev:')
+    worksheet7.write_string(3, 3, 'Average monthly yield:')
+    worksheet7.write_string(4, 3, 'Average yearly yield:')
+    worksheet7.write_string(5, 3, 'Daily average gain:')
+    worksheet7.write_string(6, 3, 'Monthly average gain:')
+    worksheet7.write_string(7, 3, 'Yearly average gain:')
+    worksheet7.write_string(8, 3, 'Daily average loss:')
+    worksheet7.write_string(9, 3, 'Monthly average loss:')
+    worksheet7.write_string(10, 3, 'Yearly average loss:')
+    worksheet7.write_string(11, 3, 'Daily stdev gain:')
+    worksheet7.write_string(12, 3, 'Monthly stdev gain:')
+    worksheet7.write_string(13, 3, 'Yearly stdev gain:')
+    worksheet7.write_string(14, 3, 'Daily stdev loss:')
+    worksheet7.write_string(15, 3, 'Monthly stdev loss:')
+    worksheet7.write_string(16, 3, 'Yearly stdev loss:')
+    worksheet7.write_string(17, 3, 'Daily avg gain/avg:')
+    worksheet7.write_string(18, 3, 'Monthly avg gain/avg:')
+    worksheet7.write_string(19, 3, 'Yearly avg gain/avg:')
+
+    writeTransactionsAmount(positives, negatives, worksheet7, workbook, pos, neg, chart, yieldArray)
 
     workbook.close()
 
@@ -451,6 +477,7 @@ def getChartWithMaximumDrowdowns(workbook, worksheet, dd):
     row = 0
     for d in delta:
         worksheet.write_number(row, col + 2, int(d))
+        worksheet.write_number(row, col + 3, int(d)/int(B))
         row += 1
     chart.add_series({
         'values': '=Maximum drawdowns Report!$C$1:$C$5',
@@ -570,9 +597,9 @@ def getDailyChart(workbook, worksheet, yieldArray):
     d_dates = []
     d_values = []
     chart = workbook.add_chart({'type': 'column'})
-    for i in range(0,len(yieldArray[0][2])):
-        d_dates.append(yieldArray[0][2][i][0])
-        d_values.append(yieldArray[0][2][i][1])
+    for i in range(0,len(yieldArray[0][2][0])):
+        d_dates.append(yieldArray[0][2][0][i][0])
+        d_values.append(yieldArray[0][2][0][i][1])
     col = 0
     row = 0
     a = 0
@@ -593,58 +620,48 @@ def getDailyChart(workbook, worksheet, yieldArray):
     chart.set_size({'width': 720, 'height': 570})
     return chart
 
-def writeMonthlyMean(chart, worksheet7, workbook):
-    dates = []
-    values = []
-    by = lambda x: lambda y: getattr(y, x)
-    monthlyMean = chart.groupby([by('year'), by('month')]).apply(lambda x: np.mean(x))
+def getDistributionChart(workbook, worksheet, monthlyYield):
+    distribution_chart = workbook.add_chart({'type': 'line'})
+    hist_chart = workbook.add_chart({'type': 'bar'})
+
+    worksheet.write_string(0,0,'interval')
+    worksheet.write_string(1,0,'norm distrib')
+    worksheet.write_string(0,0,'frequency')
     format = workbook.add_format()
     format.set_num_format('0.00')
-    for i in range(0, len(monthlyMean)):
-        values.append(monthlyMean[i])
-        dates.append(str(monthlyMean.index[i][0])+'/'+str(monthlyMean.index[i][1]))
-    row = 1
+    a = 0
+    b = 0
+    c = 0
     col = 0
-    for d in dates:
-        worksheet7.write_string(row, col, d)
-        row += 1
     row = 1
-    for v in values:
-        worksheet7.write_number(row, col+1, v, format)
-        row += 1
+    # for q in x:
+    #     worksheet.write_number(row, col, q)
+    #     row += 1
+    #     a += 1
+    # row = 1
+    # for y in norm_distribution:
+    #     worksheet.write_number(row, col+1, y)
+    #     row += 1
+    #     b += 1
+    # row = 1
+    # for o in hist[0]:
+    #     worksheet.write_number(row, col+2, o)
+    #     row += 1
+    #     c += 1
 
-def writeYearlyMean(chart, worksheet7, workbook):
-    values = []
-    dates = []
-    by = lambda x: lambda y: getattr(y, x)
-    yearlyMean = chart.groupby([by('year')]).apply(lambda x: np.mean(x))
-    format = workbook.add_format()
-    format.set_num_format('0.00')
-    for i in range(0, len(yearlyMean)):
-        dates.append(str(yearlyMean.index[i]))
-        values.append(yearlyMean[yearlyMean.index[i]])
-    row = 1
-    col = 3
-    for d in dates:
-        worksheet7.write_string(row, col, d)
-        row += 1
-    row = 1
-    for v in values:
-        worksheet7.write_number(row, col+1, v, format)
-        row += 1
+    distribution_chart.add_series({
+        'values': '=Norm Distribution Report!$B$1:$B$' + str(b),
+        'categories': '=Norm Distribution Report!$A$1:$A$' + str(a)
+    })
+    hist_chart.add_series({
+        'values': '=Norm Distribution Report!$A$1:$A$' + str(a),
+        'categories': '=Norm Distribution Report!$C$1:$C$' + str(c)
+    })
+    distribution_chart.set_size({'height': 570})
+    hist_chart.set_size({'height': 570})
+    return (distribution_chart, hist_chart)
 
-def writeTransactionsAmount(positiveSeries, negativeSeries, w_sheet, w_book, pos, neg, chart):
-
-    def stdev(x):
-       return sqrt(sum((x - mean(x))**2)/(len(x)-1))
-
-    monthValue = pd.Series()
-    yearValue = pd.Series()
-    lastValue = chart[-1]
-    lastDate = chart.index[-1]
-    month = chart.index[0].strftime('%Y-%m')
-    year = chart.index[0].strftime('%Y')
-
+def writeTransactionsAmount(positiveSeries, negativeSeries, w_sheet, w_book, pos, neg, chart, yieldArray):
     negativeValue = 0
     positiveValue = 0
     positiveMean = 0
@@ -658,45 +675,113 @@ def writeTransactionsAmount(positiveSeries, negativeSeries, w_sheet, w_book, pos
     format.set_num_format('0.00%')
     format1 = w_book.add_format()
     format1.set_num_format('0.00')
-    w_sheet.write_number(0, 1, pos)
-    w_sheet.write_number(1, 1, neg)
+    w_sheet.write_number(0, 1, pos)#count of positive deals
+    w_sheet.write_number(1, 1, neg)#count of negative deals
+    #mean of positives
     if len(positiveSeries) == 0:
-        w_sheet.write_number(2, 1, 0, format1)
+        w_sheet.write_number(2, 1, positiveMean, format1)
     else:
-        w_sheet.write_number(2, 1, mean(positiveSeries), format1)
+        positiveMean = mean(positiveSeries)
+        w_sheet.write_number(2, 1, positiveMean, format1)
+    #mean of negatives
     if len(negativeSeries) == 0:
-        w_sheet.write_number(3, 1, 0, format1)
+        w_sheet.write_number(3, 1, negativeMean, format1)
     else:
-        w_sheet.write_number(3, 1, mean(negativeSeries), format1)
-    w_sheet.write_number(4, 1, (pos/(len(positiveSeries)+len(negativeSeries))), format)
-    w_sheet.write_number(5, 1, (positiveValue+negativeValue)/(len(positiveSeries)+len(negativeSeries)), format1)
-    w_sheet.write_number(6, 1, chart[-1], format1)
-    w_sheet.write_number(7, 1, sum(positiveValue + negativeValue), format1)
+        negativeMean =  mean(negativeSeries)
+        w_sheet.write_number(3, 1, negativeMean, format1)
+    w_sheet.write_number(4, 1, (pos/(len(positiveSeries) + len(negativeSeries))), format)#percentage of positives
+    w_sheet.write_number(5, 1, (positiveValue + negativeValue)/(len(positiveSeries) + len(negativeSeries)), format1)#mean of all deals
+    w_sheet.write_number(6, 1, chart[-1], format1)#total profit
+    w_sheet.write_number(7, 1, pos + neg)#total trades
+    #ratio
     if negativeMean == 0:
         w_sheet.write_number(8, 1, 0)
     else:
-        w_sheet.write_number(8, 1, positiveMean/negativeMean, format1)
-    w_sheet.write_number(9, 1, positiveValue, format1)
-    w_sheet.write_number(10, 1, negativeValue, format1)
+        w_sheet.write_number(8, 1, abs(positiveMean/negativeMean), format1)
+    w_sheet.write_number(9, 1, positiveValue, format1)#gross profit
+    w_sheet.write_number(10, 1, negativeValue, format1)#gross loss
+    #profit factor
     if negativeValue == 0:
         w_sheet.write_number(11, 1, 0)
     else:
-        w_sheet.write_number(11, 1, positiveValue/negativeValue, format1)
-    w_sheet.write_number(12, 1, stdev(chart), format1)
-    for o in range(1, len(chart)):
-        if chart.index[o].strftime('%Y-%m') > month:
-            if chart.index[o].strftime('%Y-%m') > chart.index[o - 1].strftime('%Y-%m'):
-                monthValue.set_value(chart.index[o-1], chart[o-1])
-                month = chart.index[o].strftime('%Y-%m')
-    for r in range(1, len(chart)):
-        if chart.index[r].strftime('%Y') > year:
-            if chart.index[r].strftime('%Y') > chart.index[r - 1].strftime('%Y'):
-                yearValue.set_value(chart.index[r-1], chart[r-1])
-                year = chart.index[r].strftime('%Y-%m')
-    monthValue.set_value(lastDate, lastValue)
-    yearValue.set_value(lastDate, lastValue)
-    w_sheet.write_number(13, 1, stdev(monthValue), format1)
-    w_sheet.write_number(14, 1, stdev(yearValue), format1)
+        w_sheet.write_number(11, 1, abs(positiveValue/negativeValue), format1)
+    calculateAvgInYield(yieldArray[0][2][1], yieldArray[0][0], yieldArray[0][1], w_sheet)
+
+def calculateAvgInYield(dailyYield, monthlyYield, yearlyYield, w_sheet):
+
+    def stdev(x):
+       return sqrt(sum((x - mean(x))**2)/(len(x)-1))
+
+    def calcMean(arr):
+        positiveSum = negativeSum = 0
+        countPos = countNeg = 0
+        for x in arr:
+            if x >= 0:
+                positiveSum += x
+                countPos += 1
+            else:
+                negativeSum += x
+                countNeg += 1
+        meanPos = 0 if countPos == 0 else positiveSum/countPos
+        meanNeg = 0 if countNeg == 0 else negativeSum/countNeg
+        return (meanPos, meanNeg)
+
+    def calcStdev(arr):
+        posArr = []
+        negArr = []
+        for x in arr:
+            if x >= 0:
+                posArr.append(x)
+            else:
+                negArr.append(x)
+        return (stdev(posArr), stdev(negArr))
+
+    def calcRatio(pos, neg):
+        return 0 if neg == 0 else (pos/neg)
+
+    monthes=[]
+    for b in range(0, len(monthlyYield)):
+        monthes.append(monthlyYield[b][1])
+    years=[]
+    for c in range(0, len(yearlyYield)):
+        years.append(yearlyYield[c][1])
+    w_sheet.write_number(0, 4, stdev(dailyYield))#daily stdev
+    w_sheet.write_number(1, 4, stdev(monthes))#monthly stdev
+    w_sheet.write_number(2, 4, stdev(years))#yearly stdev
+    w_sheet.write_number(3, 4, mean(monthes))#average monthly yield
+    w_sheet.write_number(4, 4, mean(years))#average yearly yield
+
+    #Daily average gain, Monthly average gain, Yearly average gain, Daily average loss, Monthly average loss, Yearly average loss
+
+    dayPosMean, dayNegMean = calcMean(dailyYield)
+    monthPosMean, monthNegMean = calcMean(monthes)
+    yearPosMean, yearNegMean = calcMean(years)
+    w_sheet.write_number(5, 4, dayPosMean)
+    w_sheet.write_number(6, 4, monthPosMean)
+    w_sheet.write_number(7, 4, yearPosMean)
+    w_sheet.write_number(8, 4, dayNegMean)
+    w_sheet.write_number(9, 4, monthNegMean)
+    w_sheet.write_number(10, 4, yearNegMean)
+
+    #Standard deviations
+    dayPosStdev, dayNegStdev = calcStdev(dailyYield)
+    monthPosStdev, monthNegStdev = calcStdev(monthes)
+    yearPosStdev, yearNegStdev = calcStdev(years)
+    w_sheet.write_number(11, 4, dayPosStdev)
+    w_sheet.write_number(12, 4, monthPosStdev)
+    w_sheet.write_number(13, 4, yearPosStdev)
+    w_sheet.write_number(14, 4, dayNegStdev)
+    w_sheet.write_number(15, 4, monthNegStdev)
+    w_sheet.write_number(16, 4, yearNegStdev)
+
+    #avg gain/avg loss
+    dayRatio = calcRatio(dayPosMean, dayNegMean)
+    monthRatio = calcRatio(monthPosMean, monthNegMean)
+    yearRatio = calcRatio(yearPosMean, yearNegMean)
+    w_sheet.write_number(17, 4, dayRatio)
+    w_sheet.write_number(18, 4, monthRatio)
+    w_sheet.write_number(19, 4, yearRatio)
+
 
 def showPlot(totalCumulativeChart):
     def format_date(x, pos=None):
