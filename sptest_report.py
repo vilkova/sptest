@@ -716,9 +716,9 @@ def writeTransactionsAmount(positiveSeries, negativeSeries, w_sheet, w_book, pos
         w_sheet.write_number(11, 1, 0)
     else:
         w_sheet.write_number(11, 1, abs(positiveValue/negativeValue), format1)
-    calculateAvgInYield(yieldArray[0][2][1], yieldArray[0][0], yieldArray[0][1], w_sheet, dd, len(chart))
+    calculateAvgInYield(yieldArray[0][2][1], yieldArray[0][0], yieldArray[0][1], w_sheet, dd)
 
-def calculateAvgInYield(dailyYield, monthlyYield, yearlyYield, w_sheet, dd, totalDaysCount):
+def calculateAvgInYield(dailyYield, monthlyYield, yearlyYield, w_sheet, dd):
 
     def stdev(x):
        return sqrt(sum((x - mean(x))**2)/(len(x)-1))
@@ -805,9 +805,9 @@ def calculateAvgInYield(dailyYield, monthlyYield, yearlyYield, w_sheet, dd, tota
     sterling = avgYearlyYield/abs(maxDD - 0.1)
     sharpeRatioYearly = (avgYearlyYield - 0.05)/yearlyStdev
     sharpeRatioMonthly = (avgMonthlyYield - 0.0042)/monthlyStdev
-    sharpRatio2Daily = sqrt(totalDaysCount)*avgDailyYield/dailyStdev
-    sharpRatio2Monthly = sqrt(totalDaysCount)*avgMonthlyYield/monthlyStdev
-    sharpRatio2Yearly = sqrt(totalDaysCount)*avgYearlyYield/yearlyStdev
+    sharpRatio2Daily = sqrt(253)*avgDailyYield/dailyStdev
+    sharpRatio2Monthly = sqrt(12)*avgMonthlyYield/monthlyStdev
+    sharpRatio2Yearly = avgYearlyYield/yearlyStdev
     w_sheet.write_number(0, 7, calmar)
     w_sheet.write_number(1, 7, sterling)
     w_sheet.write_number(2, 7, sharpeRatioMonthly)
