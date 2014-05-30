@@ -321,8 +321,8 @@ def getYearlyReport(chart):
     year = chart.index[0].strftime('%Y')
     KYearsArray = []
     for q in range(1, len(chart)):
-        if chart.index[q].strftime('%Y') > year:
-            if chart.index[q].strftime('%Y') > chart.index[q - 1].strftime('%Y'):
+        if chart.index[q].strftime('%Y') >= year:
+            if chart.index[q].strftime('%Y') >= chart.index[q - 1].strftime('%Y'):
                 KY = chart[q - 1]
                 KYearsArray.append((chart.index[q - 1], KY))
                 year = chart.index[q].strftime('%Y-%m')
@@ -342,6 +342,10 @@ def getYearlyReport(chart):
     return yearlyReport
 
 def saveAllInFile(chart, drawdownArray, dd, yieldArray, pos, neg, positives, negatives):
+    monthes = []
+    for i in range(0, len(yieldArray[0][0])):
+        monthes.append(yieldArray[0][0][i][1])
+
     workbook = xlsxwriter.Workbook('reports.xlsx')
     worksheet1 = workbook.add_worksheet("Total Cumulative Chart Report")
     worksheet2 = workbook.add_worksheet("Maximum drawdowns Report")
@@ -350,7 +354,9 @@ def saveAllInFile(chart, drawdownArray, dd, yieldArray, pos, neg, positives, neg
     worksheet5 = workbook.add_worksheet("Yearly Report")
     worksheet6 = workbook.add_worksheet("VAMI Report")
     worksheet7 = workbook.add_worksheet("Mean Values")
-    worksheet8 = workbook.add_worksheet("Norm Distribution Report")
+    worksheet8 = workbook.add_worksheet("Omega report")
+    worksheet9 = workbook.add_worksheet("Daily VaR report")
+    worksheet10 = workbook.add_worksheet("Monthly VaR report")
 
     worksheet1.set_column('A:B', 10)
     worksheet2.set_column('A:B', 10)
@@ -364,23 +370,28 @@ def saveAllInFile(chart, drawdownArray, dd, yieldArray, pos, neg, positives, neg
     worksheet7.set_column('D:D', 19)
     worksheet7.set_column('E:E', 13)
     worksheet7.set_column('G:G', 19)
-    worksheet7.set_column('H:H', 22)
+    worksheet7.set_column('H:H', 15)
     worksheet8.set_column('A:B', 10)
+    worksheet9.set_column('A:H', 10)
+    worksheet10.set_column('A:H', 10)
     chart1 = getTCCChart(workbook, worksheet1, chart)
     chart2 = getChartWithMaximumDrowdowns(workbook, worksheet2, dd)
     chart3 = getChartWithAllDrawdowns(workbook, worksheet3, drawdownArray, dd)
     chart4 = getMonthlyChart(workbook, worksheet4, yieldArray)
     chart5 = getYearlyChart(workbook, worksheet5, yieldArray)
     chart6 = getDailyChart(workbook, worksheet6, yieldArray)
-    # chart8 = getDistributionChart(workbook, worksheet8, yieldArray[0][0])
+    chart8 = getOmegaChart(workbook, worksheet8, yieldArray[0][0])
+    chart9 = getVaRChart(workbook, worksheet9, yieldArray[0][2][1], 'Daily VaR report')
+    chart10 = getVaRChart(workbook, worksheet10, monthes, 'Monthly VaR report')
     worksheet1.insert_chart('C1', chart1)
     worksheet2.insert_chart('E1', chart2)
     worksheet3.insert_chart('C1', chart3)
     worksheet4.insert_chart('C1', chart4)
     worksheet5.insert_chart('C1', chart5)
     worksheet6.insert_chart('C1', chart6)
-    # worksheet8.insert_chart('E1', chart8[0])
-    # worksheet8.insert_chart('M1', chart8[1])
+    worksheet8.insert_chart('D3', chart8)
+    worksheet9.insert_chart('A12', chart9)
+    worksheet10.insert_chart('A12', chart10)
 
     # merge_format = workbook.add_format({'align': 'center'})
     # worksheet7.merge_range('A1:B1', 'Monthly mean', merge_format)
@@ -427,7 +438,14 @@ def saveAllInFile(chart, drawdownArray, dd, yieldArray, pos, neg, positives, neg
     worksheet7.write_string(4, 6, 'Sharpe Ratio2 daily:')
     worksheet7.write_string(5, 6, 'Sharpe Ratio2 monthly:')
     worksheet7.write_string(6, 6, 'Sharpe Ratio2 yearly:')
-
+    worksheet7.write_string(7, 6, 'Sortino ratio:')
+    worksheet7.write_string(8, 6, 'Downside deviation:')
+    # worksheet7.write_string(7, 6, 'Daily skewness:')
+    # worksheet7.write_string(8, 6, 'Daily kurtosis:')
+    # worksheet7.write_string(9, 6, 'Monthly skewness:')
+    # worksheet7.write_string(10, 6, 'Monthly kurtosis:')
+    # worksheet7.write_string(11, 6, 'Yearly skewness:')
+    # worksheet7.write_string(12, 6, 'Yearly kurtosis:')
     writeTransactionsAmount(positives, negatives, worksheet7, workbook, pos, neg, chart, yieldArray, dd)
 
     workbook.close()
@@ -631,46 +649,185 @@ def getDailyChart(workbook, worksheet, yieldArray):
     chart.set_size({'width': 720, 'height': 570})
     return chart
 
-def getDistributionChart(workbook, worksheet, monthlyYield):
-    distribution_chart = workbook.add_chart({'type': 'line'})
-    hist_chart = workbook.add_chart({'type': 'bar'})
+def getOmegaChart(workbook, worksheet, monthlyYield):
 
-    worksheet.write_string(0,0,'interval')
-    worksheet.write_string(1,0,'norm distrib')
-    worksheet.write_string(0,0,'frequency')
+    def getOmega(const):
+        marArr = []
+        for m in range(0, len(monthlyYield)):
+            marArr.append(monthlyYield[m][1]-const)
+        return getOmegaValue(marArr)
+
+    def getOmegaValue(arr):
+        sumPos = 0
+        sumNeg = 0
+        for a in arr:
+            if a >= 0:
+                sumPos += a
+            else:
+                sumNeg += a
+        return 0 if sumNeg == 0 else sumPos/abs(sumNeg)
+
     format = workbook.add_format()
-    format.set_num_format('0.00')
-    a = 0
-    b = 0
-    c = 0
-    col = 0
+    format.set_num_format('0.00%')
+    omega_chart = workbook.add_chart({'type': 'line'})
+    worksheet.write_string(0, 0, 'MAR, year')
+    worksheet.write_string(0, 1, 'MAR, month')
+    worksheet.write_string(0, 3, 'MAR')
+    worksheet.write_string(1, 3, 'Omega')
+    marConst = []
     row = 1
-    # for q in x:
-    #     worksheet.write_number(row, col, q)
-    #     row += 1
-    #     a += 1
-    # row = 1
-    # for y in norm_distribution:
-    #     worksheet.write_number(row, col+1, y)
-    #     row += 1
-    #     b += 1
-    # row = 1
-    # for o in hist[0]:
-    #     worksheet.write_number(row, col+2, o)
-    #     row += 1
-    #     c += 1
+    col = 0
+    row1 = 0
+    col1 = 4
+    mar = 0.12
+    for i in range (1, 11):
+        worksheet.write_number(row, col, mar, format)
+        worksheet.write_number(row, col+1, mar/12, format)
+        marConst.append(round(mar/12, 4))
+        worksheet.write_number(row1, col1, mar)
+        row += 1
+        col1 += 1
+        mar += 0.02
+    row = 1
+    col = 4
+    for q in range(0, 10):
+        worksheet.write_number(row, col, getOmega(marConst[q]))
+        col += 1
 
-    distribution_chart.add_series({
-        'values': '=Norm Distribution Report!$B$1:$B$' + str(b),
-        'categories': '=Norm Distribution Report!$A$1:$A$' + str(a)
+    omega_chart.add_series({
+        'values': '=Omega report!$E$2:$N$2',
+        'categories': '=Omega report!$E$1:$N$1'
     })
-    hist_chart.add_series({
-        'values': '=Norm Distribution Report!$A$1:$A$' + str(a),
-        'categories': '=Norm Distribution Report!$C$1:$C$' + str(c)
+
+    omega_chart.set_size({'width': 520, 'height': 370})
+
+    return omega_chart
+
+def getVaRChart(workbook, worksheet, yieldArray, name):
+    def stdev(x):
+       return sqrt(sum((x - mean(x))**2)/(len(x)-1)) if len(x) > 1 else sqrt(sum((x - mean(x))**2)/len(x))
+
+    chart = workbook.add_chart({'type':'line'})
+    format = workbook.add_format()
+    format.set_num_format('0.00%')
+    length = len(yieldArray)
+    worksheet.write_string(0, 0, 'Confidence,%')
+    worksheet.write_string(0, 1, 'Z(quantile)')
+    worksheet.write_string(0, 2, 'VaR,normal')
+    worksheet.write_string(0, 3, 'Z,modified')
+    worksheet.write_string(0, 4, 'VaR,modified')
+    worksheet.write_string(0, 5, 'Bott-1')
+    worksheet.write_string(0, 6, 'Bott-2')
+    worksheet.write_string(0, 7, 'VaR,historical')
+
+    row = 1
+    col = 0
+    conf = 0.9
+    confidence = []
+    for q in range(0, 10):
+        worksheet.write_number(row, col, conf)
+        confidence.append(conf)
+        conf += 0.01
+        row += 1
+
+    quantile = [-1.28155157, -1.34075503, -1.40507156, -1.47579103, -1.55477359, -1.64485363, -1.75068607, -1.88079361, -2.05374891, -2.32634787]
+
+    col = 1
+    row = 1
+    for i in range(0, 10):
+        worksheet.write_number(row+i, col, quantile[i])
+        i += 1
+
+    avgDailyYield = mean(yieldArray)
+    dailyStdev = stdev(yieldArray)
+    normalVAR = []
+    for k in range(0, 10):
+        normalVAR.append(avgDailyYield + (quantile[k]*dailyStdev))
+
+    col = 2
+    row = 1
+    for w in range(0, 10):
+        worksheet.write_number(row+w, col, normalVAR[w], format)
+        w += 1
+
+    row = 1
+    col  = 5
+    for e in range(0, len(normalVAR)):
+        koef = length*(1-confidence[e])
+        ind = koef if koef > 1 else 1
+        sortedYield = sorted(yieldArray)
+        bott1 = sortedYield[round(ind)-1]
+        bott2 = sortedYield[int(ind)]
+
+        historicalVar = bott1 + (bott2 - bott1)*(koef - int(koef))
+        worksheet.write_number(row+e, col, bott1)
+        worksheet.write_number(row+e, col+1, bott2)
+        worksheet.write_number(row+e, col+2, historicalVar, format)
+
+    worksheet.write_string(0, 9, 'Yield array')
+    row = 1
+    col = 9
+    for value in yieldArray:
+        worksheet.write_number(row, col, value)
+        row += 1
+
+    chart.add_series({
+        'name':   '='+name+'!$C$1',
+        'values' : '='+name+'!$C$2:$C$11',
+        'categories' : '='+name+'!$A$2:$A$11'
     })
-    distribution_chart.set_size({'height': 570})
-    hist_chart.set_size({'height': 570})
-    return (distribution_chart, hist_chart)
+    chart.add_series({
+        'name':   '='+name+'!$H$1',
+        'values' : '='+name+'!$H$2:$H$11',
+        'categories' : '='+name+'!$A$2:$A$11'
+    })
+    chart.set_size({'width': 620, 'height': 370})
+
+    return chart
+
+def getMonthlyVaRChart(workbook, worksheet10, monthlyYield):
+    pass
+
+# def getDistributionChart(workbook, worksheet, monthlyYield):
+#     distribution_chart = workbook.add_chart({'type': 'line'})
+#     hist_chart = workbook.add_chart({'type': 'bar'})
+#
+#     worksheet.write_string(0,0,'interval')
+#     worksheet.write_string(1,0,'norm distrib')
+#     worksheet.write_string(0,0,'frequency')
+#     format = workbook.add_format()
+#     format.set_num_format('0.00')
+#     a = 0
+#     b = 0
+#     c = 0
+#     col = 0
+#     row = 1
+#     # for q in x:
+#     #     worksheet.write_number(row, col, q)
+#     #     row += 1
+#     #     a += 1
+#     # row = 1
+#     # for y in norm_distribution:
+#     #     worksheet.write_number(row, col+1, y)
+#     #     row += 1
+#     #     b += 1
+#     # row = 1
+#     # for o in hist[0]:
+#     #     worksheet.write_number(row, col+2, o)
+#     #     row += 1
+#     #     c += 1
+#
+#     distribution_chart.add_series({
+#         'values': '=Norm Distribution Report!$B$1:$B$' + str(b),
+#         'categories': '=Norm Distribution Report!$A$1:$A$' + str(a)
+#     })
+#     hist_chart.add_series({
+#         'values': '=Norm Distribution Report!$A$1:$A$' + str(a),
+#         'categories': '=Norm Distribution Report!$C$1:$C$' + str(c)
+#     })
+#     distribution_chart.set_size({'height': 570})
+#     hist_chart.set_size({'height': 570})
+#     return (distribution_chart, hist_chart)
 
 def writeTransactionsAmount(positiveSeries, negativeSeries, w_sheet, w_book, pos, neg, chart, yieldArray, dd):
     negativeValue = 0
@@ -719,14 +876,14 @@ def writeTransactionsAmount(positiveSeries, negativeSeries, w_sheet, w_book, pos
     calculateAvgInYield(yieldArray[0][2][1], yieldArray[0][0], yieldArray[0][1], w_sheet, dd)
 
 def calculateAvgInYield(dailyYield, monthlyYield, yearlyYield, w_sheet, dd):
-
     def stdev(x):
-       return sqrt(sum((x - mean(x))**2)/(len(x)-1))
+       return sqrt(sum((x - mean(x))**2)/(len(x)-1)) if len(x) > 1 else sqrt(sum((x - mean(x))**2)/len(x))
 
     def calcMean(arr):
         positiveSum = negativeSum = 0
         countPos = countNeg = 0
         for x in arr:
+
             if x >= 0:
                 positiveSum += x
                 countPos += 1
@@ -745,10 +902,22 @@ def calculateAvgInYield(dailyYield, monthlyYield, yearlyYield, w_sheet, dd):
                 posArr.append(x)
             else:
                 negArr.append(x)
-        return (stdev(posArr), stdev(negArr))
+        posStdev = stdev(posArr) if len(posArr) > 0 else 0
+        negStdev = stdev(negArr) if len(negArr) > 0 else 0
+        return (posStdev, negStdev)
 
     def calcRatio(pos, neg):
         return 0 if neg == 0 else (pos/neg)
+
+    def downside_dev(arr):
+        result = []
+        for i in arr:
+            val = i - 0.0167
+            if val >= 0:
+               result.append(0)
+            else:
+               result.append(val)
+        return stdev(result)
 
     monthes=[]
     for b in range(0, len(monthlyYield)):
@@ -799,15 +968,23 @@ def calculateAvgInYield(dailyYield, monthlyYield, yearlyYield, w_sheet, dd):
     w_sheet.write_number(19, 4, monthRatio)
     w_sheet.write_number(20, 4, yearRatio)
 
-    #Calmar ratio, Sterling ratio, Sharpe ratios
-    maxDD = min(dd,key=lambda x:x[2])[2]
-    calmar = abs(avgYearlyYield/maxDD)
+    #Calmar ratio, Sterling ratio, Sharpe ratios, Sortino ratio
+    maxDD = min(dd,key=lambda x:x[2])[2]/int(B)
+    calmar = avgYearlyYield/abs(maxDD)
     sterling = avgYearlyYield/abs(maxDD - 0.1)
     sharpeRatioYearly = (avgYearlyYield - 0.05)/yearlyStdev
     sharpeRatioMonthly = (avgMonthlyYield - 0.0042)/monthlyStdev
     sharpRatio2Daily = sqrt(253)*avgDailyYield/dailyStdev
     sharpRatio2Monthly = sqrt(12)*avgMonthlyYield/monthlyStdev
     sharpRatio2Yearly = avgYearlyYield/yearlyStdev
+    downSideDev = downside_dev(monthes)
+    sortinoRatio = (avgMonthlyYield - 0.0167)/downSideDev if downSideDev != 0 else 0
+    # dailySkew = stats.skew(dailyYield)
+    # dailyKurtosis = stats.kurtosis(dailyYield)
+    # monthlySkew = stats.skew(monthes)
+    # monthlyKurtosis = stats.kurtosis(monthes)
+    # yearlySkew = stats.skew(years)
+    # yearlyKurtosis = stats.kurtosis(years)
     w_sheet.write_number(0, 7, calmar)
     w_sheet.write_number(1, 7, sterling)
     w_sheet.write_number(2, 7, sharpeRatioMonthly)
@@ -815,6 +992,14 @@ def calculateAvgInYield(dailyYield, monthlyYield, yearlyYield, w_sheet, dd):
     w_sheet.write_number(4, 7, sharpRatio2Daily)
     w_sheet.write_number(5, 7, sharpRatio2Monthly)
     w_sheet.write_number(6, 7, sharpRatio2Yearly)
+    w_sheet.write_number(7, 7, sortinoRatio)
+    w_sheet.write_number(8, 7, downSideDev)
+    # w_sheet.write_number(7, 7, dailySkew)
+    # w_sheet.write_number(8, 7, dailyKurtosis)
+    # w_sheet.write_number(9, 7, monthlySkew)
+    # w_sheet.write_number(10, 7, monthlyKurtosis)
+    # w_sheet.write_number(11, 7, yearlySkew)
+    # w_sheet.write_number(12, 7, yearlyKurtosis)
 
 def showPlot(totalCumulativeChart):
     def format_date(x, pos=None):
@@ -838,5 +1023,7 @@ def showPlot(totalCumulativeChart):
     ax.yaxis.grid()
     plt.xticks(np.arange(min(ind), max(ind), 15))
     plt.show()
+
+
 
 main()
