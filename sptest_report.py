@@ -440,12 +440,12 @@ def saveAllInFile(chart, drawdownArray, dd, yieldArray, pos, neg, positives, neg
     worksheet7.write_string(6, 6, 'Sharpe Ratio2 yearly:')
     worksheet7.write_string(7, 6, 'Sortino ratio:')
     worksheet7.write_string(8, 6, 'Downside deviation:')
-    # worksheet7.write_string(7, 6, 'Daily skewness:')
-    # worksheet7.write_string(8, 6, 'Daily kurtosis:')
-    # worksheet7.write_string(9, 6, 'Monthly skewness:')
-    # worksheet7.write_string(10, 6, 'Monthly kurtosis:')
-    # worksheet7.write_string(11, 6, 'Yearly skewness:')
-    # worksheet7.write_string(12, 6, 'Yearly kurtosis:')
+    worksheet7.write_string(9, 6, 'Daily skewness:')
+    worksheet7.write_string(10, 6, 'Monthly skewness:')
+    worksheet7.write_string(11, 6, 'Yearly skewness:')
+    worksheet7.write_string(12, 6, 'Daily kurtosis:')
+    worksheet7.write_string(13, 6, 'Monthly kurtosis:')
+    worksheet7.write_string(14, 6, 'Yearly kurtosis:')
     writeTransactionsAmount(positives, negatives, worksheet7, workbook, pos, neg, chart, yieldArray, dd)
 
     workbook.close()
@@ -879,6 +879,20 @@ def calculateAvgInYield(dailyYield, monthlyYield, yearlyYield, w_sheet, dd):
     def stdev(x):
        return sqrt(sum((x - mean(x))**2)/(len(x)-1)) if len(x) > 1 else sqrt(sum((x - mean(x))**2)/len(x))
 
+    def skew(x, avg, stdev):
+        n = len(x)
+        arr = ((x - avg)/stdev)**3
+        summary = sum(arr)
+        return n*summary/((n-1)*(n-2)) if n > 2 else 0
+
+    def kurtosis(x, avg, stdev):
+        n = len(x)
+        arr = ((x - avg)/stdev)**4
+        summary = sum(arr)
+        a = (n*(n + 1))/((n-1)*(n-2)*(n-3)) if n > 3 else 0
+        b = 3*(n-1)**2/((n-2)*(n-3)) if n > 3 else 0
+        return a*summary - b
+
     def calcMean(arr):
         positiveSum = negativeSum = 0
         countPos = countNeg = 0
@@ -979,12 +993,12 @@ def calculateAvgInYield(dailyYield, monthlyYield, yearlyYield, w_sheet, dd):
     sharpRatio2Yearly = avgYearlyYield/yearlyStdev
     downSideDev = downside_dev(monthes)
     sortinoRatio = (avgMonthlyYield - 0.0167)/downSideDev if downSideDev != 0 else 0
-    # dailySkew = stats.skew(dailyYield)
-    # dailyKurtosis = stats.kurtosis(dailyYield)
-    # monthlySkew = stats.skew(monthes)
-    # monthlyKurtosis = stats.kurtosis(monthes)
-    # yearlySkew = stats.skew(years)
-    # yearlyKurtosis = stats.kurtosis(years)
+    dailySkew = skew(dailyYield, avgDailyYield, dailyStdev)
+    dailyKurtosis = kurtosis(dailyYield, avgDailyYield, dailyStdev)
+    monthlySkew = skew(monthes, avgMonthlyYield, monthlyStdev)
+    monthlyKurtosis = kurtosis(monthes, avgMonthlyYield, monthlyStdev)
+    yearlySkew = skew(years, avgYearlyYield, yearlyStdev)
+    yearlyKurtosis = kurtosis(years, avgYearlyYield, yearlyStdev)
     w_sheet.write_number(0, 7, calmar)
     w_sheet.write_number(1, 7, sterling)
     w_sheet.write_number(2, 7, sharpeRatioMonthly)
@@ -994,12 +1008,12 @@ def calculateAvgInYield(dailyYield, monthlyYield, yearlyYield, w_sheet, dd):
     w_sheet.write_number(6, 7, sharpRatio2Yearly)
     w_sheet.write_number(7, 7, sortinoRatio)
     w_sheet.write_number(8, 7, downSideDev)
-    # w_sheet.write_number(7, 7, dailySkew)
-    # w_sheet.write_number(8, 7, dailyKurtosis)
-    # w_sheet.write_number(9, 7, monthlySkew)
-    # w_sheet.write_number(10, 7, monthlyKurtosis)
-    # w_sheet.write_number(11, 7, yearlySkew)
-    # w_sheet.write_number(12, 7, yearlyKurtosis)
+    w_sheet.write_number(9, 7, dailySkew)
+    w_sheet.write_number(10, 7, monthlySkew)
+    w_sheet.write_number(11, 7, yearlySkew)
+    w_sheet.write_number(12, 7, dailyKurtosis)
+    w_sheet.write_number(13, 7, monthlyKurtosis)
+    w_sheet.write_number(14, 7, yearlyKurtosis)
 
 def showPlot(totalCumulativeChart):
     def format_date(x, pos=None):
