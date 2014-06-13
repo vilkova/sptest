@@ -357,6 +357,7 @@ def saveAllInFile(chart, drawdownArray, dd, yieldArray, pos, neg, positives, neg
     worksheet8 = workbook.add_worksheet("Omega report")
     worksheet9 = workbook.add_worksheet("Daily VaR report")
     worksheet10 = workbook.add_worksheet("Monthly VaR report")
+    worksheet11 = workbook.add_worksheet("Normal distribution")
 
     worksheet1.set_column('A:B', 10)
     worksheet2.set_column('A:B', 10)
@@ -374,6 +375,8 @@ def saveAllInFile(chart, drawdownArray, dd, yieldArray, pos, neg, positives, neg
     worksheet8.set_column('A:B', 10)
     worksheet9.set_column('A:H', 10)
     worksheet10.set_column('A:H', 10)
+    worksheet11.set_column('A:B', 10)
+    worksheet11.set_column('C:C', 5)
     chart1 = getTCCChart(workbook, worksheet1, chart)
     chart2 = getChartWithMaximumDrowdowns(workbook, worksheet2, dd)
     chart3 = getChartWithAllDrawdowns(workbook, worksheet3, drawdownArray, dd)
@@ -383,15 +386,22 @@ def saveAllInFile(chart, drawdownArray, dd, yieldArray, pos, neg, positives, neg
     chart8 = getOmegaChart(workbook, worksheet8, yieldArray[0][0])
     chart9 = getVaRChart(workbook, worksheet9, yieldArray[0][2][1], 'Daily VaR report')
     chart10 = getVaRChart(workbook, worksheet10, monthes, 'Monthly VaR report')
+    chart11 = getDistributionChart(workbook, worksheet11, monthes)
     worksheet1.insert_chart('C1', chart1)
     worksheet2.insert_chart('E1', chart2)
-    worksheet3.insert_chart('C1', chart3)
+    worksheet3.insert_chart('D1', chart3[0])
+    worksheet3.insert_chart('D24', chart3[3])
+    worksheet3.insert_chart('W1', chart3[1])
+    worksheet3.insert_chart('W15', chart3[2])
     worksheet4.insert_chart('C1', chart4)
     worksheet5.insert_chart('C1', chart5)
     worksheet6.insert_chart('C1', chart6)
     worksheet8.insert_chart('D3', chart8)
     worksheet9.insert_chart('A12', chart9)
     worksheet10.insert_chart('A12', chart10)
+    worksheet11.insert_chart('E1', chart11[0])
+    worksheet11.insert_chart('L1', chart11[1])
+    worksheet11.insert_chart('E27', chart11[2])
 
     # merge_format = workbook.add_format({'align': 'center'})
     # worksheet7.merge_range('A1:B1', 'Monthly mean', merge_format)
@@ -517,6 +527,9 @@ def getChartWithMaximumDrowdowns(workbook, worksheet, dd):
 
 def getChartWithAllDrawdowns(workbook, worksheet, sortedDDArray, dd):
     chart = workbook.add_chart({'type': 'area'})
+    percent_chart = workbook.add_chart({'type': 'column'})
+    hist_chart = workbook.add_chart({'type': 'column'})
+    length = len(sortedDDArray)
     firstDate = []
     secondDate = []
     delta = []
@@ -524,7 +537,7 @@ def getChartWithAllDrawdowns(workbook, worksheet, sortedDDArray, dd):
         firstDate.append(dd[i][0])
         secondDate.append(dd[i][1])
         delta.append(dd[i][2])
-    writeArrayOFAllDDs(firstDate, secondDate, delta, worksheet)
+    hist_percent_chart = writeArrayOFAllDDs(firstDate, secondDate, delta, worksheet, length, workbook)
     col = 0
     row = 0
     a = 0
@@ -537,16 +550,60 @@ def getChartWithAllDrawdowns(workbook, worksheet, sortedDDArray, dd):
     row = 0
     for d in (sortedDDArray):
         worksheet.write_number(row, col + 1, int(d))
+        worksheet.write_number(row, col + 2, int(d)/int(B))
         row += 1
         c += 1
     chart.add_series({
         'values': '=All drawdowns Report!$B$1:$B$' + str(c),
         'categories': '=All drawdowns Report!$A$1:$A$' + str(a)
     })
+    percent_chart.add_series({
+        'values': '=All drawdowns Report!$C$1:$C$' + str(c),
+        'categories': '=All drawdowns Report!$A$1:$A$' + str(a)
+    })
     chart.set_size({'width': 600, 'height': 470})
-    return chart
+    percent_chart.set_size({'width': 600, 'height': 470})
 
-def writeArrayOFAllDDs(firstDate, secondDate, delta, worksheet):
+    #configure histogram
+    worksheet.write_string(0, 16, 'Interval')
+    worksheet.write_string(0, 17, 'Freq')
+    col = 16
+    row = 1
+    l = 0
+    f = -50000
+    interval = []
+    while(f <= 1000):
+        worksheet.write_number(row, col, f)
+        interval.append((f, 0))
+        row +=1
+        f += 500
+        l += 1
+
+    for y in delta:
+        for x in range(0, len(interval)):
+            key = interval[x][0]
+            if key - 250 < y < key + 250:
+                value = interval[x][1] + 1
+                del interval[x]
+                interval.insert(x, (key, value))
+                continue
+    row = 1
+    col = 17
+    for q in range(0, len(interval)):
+        worksheet.write_number(row+q, col, interval[q][1])
+        q += 1
+
+    hist_chart.add_series({
+        'values': '=All drawdowns Report!$R$2:$R$'+str(l),
+        'categories': '=All drawdowns Report!$Q$2:$Q$'+str(l)
+    })
+    hist_chart.set_size({'width': 550})
+
+    return (chart, hist_chart, hist_percent_chart, percent_chart)
+
+def writeArrayOFAllDDs(firstDate, secondDate, delta, worksheet, length, workbook):
+
+    hist_perecent_chart = workbook.add_chart({'type': 'column'})
     row = 0
     col = 12
 
@@ -560,9 +617,52 @@ def writeArrayOFAllDDs(firstDate, secondDate, delta, worksheet):
         worksheet.write_string(row, col+1, dateRight)
         row += 1
     row = 0
+    percentArr = []
     for d in delta:
+        percent = int(d)/int(B)
         worksheet.write_number(row, col + 2, int(d))
+        worksheet.write_number(row, col + 3, percent)
+        percentArr.append(percent)
         row += 1
+
+    #configure histogram
+    worksheet.write_string(0, 19, 'Interval')
+    worksheet.write_string(0, 20, 'Freq')
+    col = 19
+    row = 1
+    f = -0.2
+    interval = []
+    while(f <= 0.41):
+        worksheet.write_number(row, col, f)
+        interval.append((f, 0))
+        row +=1
+        f += 0.01
+
+    for y in percentArr:
+        for x in range(0, len(interval)):
+            key = interval[x][0]
+            if key - 0.005 < y < key + 0.005:
+                value = interval[x][1] + 1
+                del interval[x]
+                interval.insert(x, (key, value))
+                continue
+
+    count = 0
+    for z in range(0, len(interval)):
+        count += interval[z][1]
+
+    row = 1
+    col = 20
+    for q in range(0, len(interval)):
+        worksheet.write_number(row+q, col, interval[q][1]/count)
+        q += 1
+
+    hist_perecent_chart.add_series({
+        'values': '=All drawdowns Report!$U$2:$U$82',
+        'categories': '=All drawdowns Report!$T$2:$T$82'
+    })
+    hist_perecent_chart.set_size({'width': 550})
+    return hist_perecent_chart
 
 def getMonthlyChart(workbook, worksheet, yieldArray):
     m_dates = []
@@ -707,10 +807,28 @@ def getVaRChart(workbook, worksheet, yieldArray, name):
     def stdev(x):
        return sqrt(sum((x - mean(x))**2)/(len(x)-1)) if len(x) > 1 else sqrt(sum((x - mean(x))**2)/len(x))
 
+    def skew(x, avg, stdev):
+        n = len(x)
+        arr = ((x - avg)/stdev)**3
+        summary = sum(arr)
+        return n*summary/((n-1)*(n-2)) if n > 2 else 0
+
+    def kurtosis(x, avg, stdev):
+        n = len(x)
+        arr = ((x - avg)/stdev)**4
+        summary = sum(arr)
+        a = (n*(n + 1))/((n-1)*(n-2)*(n-3)) if n > 3 else 0
+        b = 3*(n-1)**2/((n-2)*(n-3)) if n > 3 else 0
+        return a*summary - b
+
     chart = workbook.add_chart({'type':'line'})
     format = workbook.add_format()
     format.set_num_format('0.00%')
     length = len(yieldArray)
+    avgDailyYield = mean(yieldArray)
+    dailyStdev = stdev(yieldArray)
+    skewness = skew(yieldArray, avgDailyYield, dailyStdev)
+    kurt = kurtosis(yieldArray, avgDailyYield, dailyStdev)
     worksheet.write_string(0, 0, 'Confidence,%')
     worksheet.write_string(0, 1, 'Z(quantile)')
     worksheet.write_string(0, 2, 'VaR,normal')
@@ -737,22 +855,34 @@ def getVaRChart(workbook, worksheet, yieldArray, name):
     for i in range(0, 10):
         worksheet.write_number(row+i, col, quantile[i])
         i += 1
-
-    avgDailyYield = mean(yieldArray)
-    dailyStdev = stdev(yieldArray)
-    normalVAR = []
-    for k in range(0, 10):
-        normalVAR.append(avgDailyYield + (quantile[k]*dailyStdev))
-
+    normVarArr = []
     col = 2
     row = 1
     for w in range(0, 10):
-        worksheet.write_number(row+w, col, normalVAR[w], format)
+        normalVAR = avgDailyYield + (quantile[w]*dailyStdev)
+        normVarArr.append(normalVAR)
+        worksheet.write_number(row+w, col, normalVAR, format)
         w += 1
 
     row = 1
+    col = 3
+    zModArr =[]
+    for g in range(0, 10):
+        zMod = quantile[g] + (2*quantile[g] - 1)*skewness/6 + (quantile[g]**3 - 3*quantile[g])*kurt/24 - (2*quantile[g]**3 - 5*quantile[g])*(skewness**2)/36
+        zModArr.append(zMod)
+        worksheet.write_number(row+g, col, zMod)
+        g += 1
+
+    row = 1
+    col = 4
+    for t in range(0, 10):
+        modifiedVar = avgDailyYield + dailyStdev*zModArr[t]
+        worksheet.write_number(row+t, col, modifiedVar, format)
+        t += 1
+
+    row = 1
     col  = 5
-    for e in range(0, len(normalVAR)):
+    for e in range(0, len(normVarArr)):
         koef = length*(1-confidence[e])
         ind = koef if koef > 1 else 1
         sortedYield = sorted(yieldArray)
@@ -781,53 +911,87 @@ def getVaRChart(workbook, worksheet, yieldArray, name):
         'values' : '='+name+'!$H$2:$H$11',
         'categories' : '='+name+'!$A$2:$A$11'
     })
+    chart.add_series({
+        'name':   '='+name+'!$E$1',
+        'values' : '='+name+'!$E$2:$E$11',
+        'categories' : '='+name+'!$A$2:$A$11'
+    })
     chart.set_size({'width': 620, 'height': 370})
 
     return chart
 
-def getMonthlyVaRChart(workbook, worksheet10, monthlyYield):
-    pass
 
-# def getDistributionChart(workbook, worksheet, monthlyYield):
-#     distribution_chart = workbook.add_chart({'type': 'line'})
-#     hist_chart = workbook.add_chart({'type': 'bar'})
-#
-#     worksheet.write_string(0,0,'interval')
-#     worksheet.write_string(1,0,'norm distrib')
-#     worksheet.write_string(0,0,'frequency')
-#     format = workbook.add_format()
-#     format.set_num_format('0.00')
-#     a = 0
-#     b = 0
-#     c = 0
-#     col = 0
-#     row = 1
-#     # for q in x:
-#     #     worksheet.write_number(row, col, q)
-#     #     row += 1
-#     #     a += 1
-#     # row = 1
-#     # for y in norm_distribution:
-#     #     worksheet.write_number(row, col+1, y)
-#     #     row += 1
-#     #     b += 1
-#     # row = 1
-#     # for o in hist[0]:
-#     #     worksheet.write_number(row, col+2, o)
-#     #     row += 1
-#     #     c += 1
-#
-#     distribution_chart.add_series({
-#         'values': '=Norm Distribution Report!$B$1:$B$' + str(b),
-#         'categories': '=Norm Distribution Report!$A$1:$A$' + str(a)
-#     })
-#     hist_chart.add_series({
-#         'values': '=Norm Distribution Report!$A$1:$A$' + str(a),
-#         'categories': '=Norm Distribution Report!$C$1:$C$' + str(c)
-#     })
-#     distribution_chart.set_size({'height': 570})
-#     hist_chart.set_size({'height': 570})
-#     return (distribution_chart, hist_chart)
+def getDistributionChart(workbook, worksheet, yieldArray):
+
+    def stdev(x):
+       return sqrt(sum((x - mean(x))**2)/(len(x)-1)) if len(x) > 1 else sqrt(sum((x - mean(x))**2)/len(x))
+
+    avgYield = mean(yieldArray)
+    dev = stdev(yieldArray)
+
+    def normal_distribution(x):
+        a = 1/(dev*sqrt(2*pi))
+        b = (x - avgYield)**2/(2*dev**2)
+        return a*exp(-b)
+
+    distribution_chart = workbook.add_chart({'type': 'line'})
+    hist_chart = workbook.add_chart({'type': 'column'})
+    percent_chart = workbook.add_chart({'type': 'column'})
+    worksheet.write_string(0, 0, 'Interval')
+    worksheet.write_string(0, 1, 'Norm distribution')
+    worksheet.write_string(0, 2, 'Freq')
+    worksheet.write_string(0, 3, 'Freq, %')
+
+    col = 0
+    row = 1
+    a = 0
+    i = -0.3
+    interval = []
+    while(i <= 0.51):
+        worksheet.write_number(row, col, i)
+        interval.append((i, 0))
+        row +=1
+        i += 0.01
+        a += 1
+
+    for y in yieldArray:
+        for x in range(0, len(interval)):
+            key = interval[x][0]
+            if key - 0.005 < y < key + 0.005:
+                value = interval[x][1] + 1
+                del interval[x]
+                interval.insert(x, (key, value))
+                continue
+
+    count = 0
+    for z in range(0, len(interval)):
+        count += interval[z][1]
+
+
+    row = 1
+    col = 1
+    for q in range(0, len(interval)):
+        worksheet.write_number(row+q, col, normal_distribution(interval[q][0]))
+        worksheet.write_number(row+q, col+1, interval[q][1])
+        worksheet.write_number(row+q, col+2, interval[q][1]/count)
+        q += 1
+
+    distribution_chart.add_series({
+        'values': '=Normal distribution!$B$2:$B$'+str(a),
+        'categories': '=Normal distribution!$A$2:$A$'+str(a)
+    })
+    hist_chart.add_series({
+        'values': '=Normal distribution!$C$2:$C$'+str(a),
+        'categories': '=Normal distribution!$A$2:$A$'+str(a)
+    })
+    percent_chart.add_series({
+        'values': '=Normal distribution!$D$2:$D$'+str(a),
+        'categories': '=Normal distribution!$A$2:$A$'+str(a)
+    })
+    distribution_chart.set_size({'height': 570})
+    hist_chart.set_size({'height': 570, 'width': 420})
+    percent_chart.set_size({'height': 570, 'width': 500})
+    return (distribution_chart, hist_chart, percent_chart)
 
 def writeTransactionsAmount(positiveSeries, negativeSeries, w_sheet, w_book, pos, neg, chart, yieldArray, dd):
     negativeValue = 0

@@ -1,7 +1,6 @@
 authtoken.p
 cache-data/*
-spreadmatrix.xlsx
+*.xlsx
 test.py
 .idea
 .~lock.*
-reports.xlsx
