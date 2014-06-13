@@ -87,7 +87,7 @@ def getSpreadDelta(row):
                          int(row[4].decode("utf-8")), row[5].decode("utf-8"), row[6].decode("utf-8"),
                          int(row[7].decode("utf-8")), True, years)
     spreadSeries = convertSpreadSeriesToDelta(spread[0])
-    return (spread[1], spreadSeries)
+    return (spread[1], spreadSeries, spread[2])
 
 def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_DATE, END_DATE, BUCK_PRICE,
                 STARTFROMZERO, years):
@@ -96,6 +96,7 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
     totalSpread = pd.Series()
     lastValue = 0
     filteredTotalSpread = pd.Series()
+    spreadForStdevs = []
     for i in years:
         year = str(i)
         price = str(BUCK_PRICE)
@@ -140,7 +141,7 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
             spreadForMeanReport = convertDeltaSeriesToCumulativeGraph(convertSpreadSeriesToDelta(spread - spread[0]))
             delta = lastValue - spread[0]
             spread = spread + delta
-
+            spreadForStdevs.append(spreadForMeanReport[-1])
             totalSpread = totalSpread.append(spread)
             lastValue = totalSpread[-1]
     for i in range(0, len(totalSpread)):
@@ -148,7 +149,7 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
             filteredTotalSpread.set_value(totalSpread.index[i], totalSpread[i])
     if totalSpread.size == 0:
         sys.exit(-1)
-    return (filteredTotalSpread, filename)
+    return (filteredTotalSpread, filename, spreadForStdevs)
 
 def checkIfCached(filename):
     fileNames = os.listdir(CACHE_DIR)
@@ -243,14 +244,14 @@ def countStdev(spread):
     result = []
     # globalResult = []
     contract = spread[0]
-    series = spread[1]
-    year = series.index[0].strftime('%Y')
-    for i in range(0, len(series)):
-        if series.index[i].strftime('%Y') != year:
-            result.append(series[i-1])
-            year = series.index[i].strftime('%Y')
-    result.append(series[-1])
-    st_dev = stdev(result)
+    series = spread[2]
+    # year = series.index[0].strftime('%Y')
+    # for i in range(0, len(series)):
+    #     if series.index[i].strftime('%Y') != year:
+    #         result.append(series[i-1])
+    #         year = series.index[i].strftime('%Y')
+    # result.append(series[-1])
+    st_dev = stdev(series)
     avg = mean(series)
 
     return contract[:12], st_dev, avg
@@ -260,7 +261,7 @@ def saveStdevs(list):
 
     workbook = xlsxwriter.Workbook('reports-2.xlsx')
     worksheet = workbook.add_worksheet("StDevs")
-    worksheet.set_column('A:C', 16)
+    worksheet.set_column('A:A', 15)
     worksheet.write_string(0, 0, "Deal")
     worksheet.write_string(0, 1, "StDev")
     worksheet.write_string(0, 2, "Max StDev/Stdev")
@@ -276,10 +277,14 @@ def saveStdevs(list):
         name = element[0]
         avg = element[2]
         worksheet.write_string(row, col, str(name))
-        worksheet.write_number(row, col+1, st_dev)
-        worksheet.write_number(row, col+2, (max_dev/st_dev))
-        worksheet.write_number(row, col+3, avg)
-        worksheet.write_number(row, col+4, (max_avg/avg))
+        if st_dev == nan:
+            print (element)
+        value = max_dev/st_dev
+        value2 = max_avg/avg
+        worksheet.write_number(row, col+1, round(st_dev))
+        worksheet.write_number(row, col+2, round(value))
+        worksheet.write_number(row, col+3, round(avg))
+        worksheet.write_number(row, col+4, round(value2))
 
             # if st_dev != 0 else worksheet.write_number(row, col+2, 0)
         row += 1
