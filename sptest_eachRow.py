@@ -16,6 +16,7 @@ import xlsxwriter
 AUTH_TOKEN = 'e6FuWkfWH9qypKzJz6sR'
 CACHE_DIR = "cache-data/"
 B = sys.argv[4]
+
 CURRENT_YEAR = datetime.now().year
 
 def main():
@@ -25,8 +26,6 @@ def main():
     table = retrieveTableFromExcel()
     spread1Delta = getSpreadDelta(table[1])
     result.append(countStdev(spread1Delta))
-
-
     if len(table) == 2:
         totalSpreadDelta = spread1Delta
     else:
@@ -44,9 +43,6 @@ def main():
     print(totalCumulativeChart.astype(int))
     saveStdevs(result)
     showPlot(totalCumulativeChart)
-
-
-
 
 def retrieveTableFromExcel():
     table = loadSpreadMatrix(sys.argv[1])
@@ -87,7 +83,7 @@ def getSpreadDelta(row):
                          int(row[4].decode("utf-8")), row[5].decode("utf-8"), row[6].decode("utf-8"),
                          int(row[7].decode("utf-8")), True, years)
     spreadSeries = convertSpreadSeriesToDelta(spread[0])
-    return (spread[1], spreadSeries, spread[2])
+    return (spread[1], spreadSeries, spread[2], spread[0], spread[3])
 
 def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_DATE, END_DATE, BUCK_PRICE,
                 STARTFROMZERO, years):
@@ -97,6 +93,7 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
     lastValue = 0
     filteredTotalSpread = pd.Series()
     spreadForStdevs = []
+    daltasArray = []
     for i in years:
         year = str(i)
         price = str(BUCK_PRICE)
@@ -138,7 +135,9 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
             cache = readCacheFromFile(filename)
             spread = cache
         if STARTFROMZERO:
-            spreadForMeanReport = convertDeltaSeriesToCumulativeGraph(convertSpreadSeriesToDelta(spread - spread[0]))
+            deltas = convertSpreadSeriesToDelta(spread - spread[0])
+            daltasArray.append(deltas)
+            spreadForMeanReport = convertDeltaSeriesToCumulativeGraph(deltas)
             delta = lastValue - spread[0]
             spread = spread + delta
             spreadForStdevs.append(spreadForMeanReport[-1])
@@ -149,7 +148,18 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
             filteredTotalSpread.set_value(totalSpread.index[i], totalSpread[i])
     if totalSpread.size == 0:
         sys.exit(-1)
-    return (filteredTotalSpread, filename, spreadForStdevs)
+    deltas = getDeltas(filteredTotalSpread)
+    return (filteredTotalSpread, filename, spreadForStdevs, deltas)
+
+def getDeltas(spread):
+    deltas = []
+    for i in range(1, len(spread)):
+        prev = spread[i-1]
+        next = spread[i]
+        delta = next - prev
+        deltas.append(delta)
+        i += 1
+    return deltas
 
 def checkIfCached(filename):
     fileNames = os.listdir(CACHE_DIR)
@@ -190,103 +200,92 @@ def convertDeltaSeriesToCumulativeGraph(DATA):
         prev_date = date
     return GRAPHDATA
 
-def retrieveDrawdowns(chart):
-    res = pd.Series()
-    flag = False
-    prev = 0
-    ind = chart.index[0]
-    res.set_value(ind, prev)
-    for i in range(1, len(chart)):
-        if flag:
-            if chart[i] > prev:
-                prev = chart[i]
-                ind = chart.index[i]
-                res.set_value(ind, 0)
-                flag = False
-            else:
-                ind = chart.index[i]
-                res.set_value(ind, chart[i] - prev)
-        else:
-            if chart[i] > prev:
-                prev = chart[i]
-                ind = chart.index[i]
-                res.set_value(ind, 0)
-            else:
-                ind = chart.index[i]
-                res.set_value(ind, chart[i] - prev)
-                flag = True
-    res1 = getMAximumDDs(res)
-    return (res,res1)
-
-def getMAximumDDs(res):
-    startFlag = True
-    result = []
-    if res[-1] != 0:
-        res[-1] = 0
-    for i in range(1, len(res)):
-        if startFlag:
-                if res[i-1] == 0 and res[i] != 0:
-                    startDate = res.index[i-1]
-                    startFlag = False
-        else:
-            if res[i] == 0 and res[i-1] != 0:
-                endDate = res.index[i]
-                value = min(res.truncate(startDate, endDate))
-                result.append((startDate, endDate, value))
-                startFlag = True
-    return result
 
 def countStdev(spread):
 
     def stdev(x):
         return sqrt(sum((x - mean(x))**2)/(len(x)-1)) if len(x) > 1 else sqrt(sum((x - mean(x))**2)/len(x))
-
-    result = []
-    # globalResult = []
     contract = spread[0]
     series = spread[2]
-    # year = series.index[0].strftime('%Y')
-    # for i in range(0, len(series)):
-    #     if series.index[i].strftime('%Y') != year:
-    #         result.append(series[i-1])
-    #         year = series.index[i].strftime('%Y')
-    # result.append(series[-1])
+    dailySeries = spread[3]
+    deltas = spread[4]
     st_dev = stdev(series)
     avg = mean(series)
+    daily_st_dev = stdev(dailySeries)
+    deltas_avg = mean(deltas)
+    deltas_stdev = stdev(deltas)
 
-    return contract[:12], st_dev, avg
+    return contract[:12], st_dev, avg, daily_st_dev, deltas_avg, deltas_stdev
 
 
 def saveStdevs(list):
 
     workbook = xlsxwriter.Workbook('reports-2.xlsx')
-    worksheet = workbook.add_worksheet("StDevs")
+    worksheet = workbook.add_worksheet("Coefficients")
     worksheet.set_column('A:A', 15)
     worksheet.write_string(0, 0, "Deal")
-    worksheet.write_string(0, 1, "StDev")
+    worksheet.write_string(0, 1, "StDev(years)")
     worksheet.write_string(0, 2, "Max StDev/Stdev")
-    worksheet.write_string(0, 3, "Average")
-    worksheet.write_string(0, 4, "Max Avg/Avg")
+    worksheet.write_string(0, 3, "Coeft1")
+    worksheet.write_string(0, 4, "Average")
+    worksheet.write_string(0, 5, "Max Avg/Avg")
+    worksheet.write_string(0, 6, "Coeft2")
+    worksheet.write_string(0, 7, "StDev(days)")
+    worksheet.write_string(0, 8, "Max StDev/Stdev")
+    worksheet.write_string(0, 9, "Coeft3")
+
+    worksheet.write_string(0, 10, "Average(deltas)")
+    worksheet.write_string(0, 11, "MaxAvg/Avg")
+    worksheet.write_string(0, 12, "Coeft4")
+    worksheet.write_string(0, 13, "StDev(deltas)")
+    worksheet.write_string(0, 14, "MaxStDev/Stdev")
+    worksheet.write_string(0, 15, "Coeft5")
     col = 0
     row = 1
-
     max_dev = max(list,key=lambda x:x[1])[1]
     max_avg = max(list,key=lambda x:x[2])[2]
+    max_daily_dev = max(list,key=lambda x:x[3])[3]
+    max_deltas_avg = max(list,key=lambda x:x[4])[4]
+    max_deltas_stdev = max(list,key=lambda x:x[5])[5]
     for element in list:
         st_dev = element[1]
         name = element[0]
         avg = element[2]
+        daily_st_dev = element[3]
+        delta_avg = element[4]
+        delta_stdev = element[5]
         worksheet.write_string(row, col, str(name))
-        if st_dev == nan:
-            print (element)
-        value = max_dev/st_dev
-        value2 = max_avg/avg
-        worksheet.write_number(row, col+1, round(st_dev))
-        worksheet.write_number(row, col+2, round(value))
-        worksheet.write_number(row, col+3, round(avg))
-        worksheet.write_number(row, col+4, round(value2))
 
-            # if st_dev != 0 else worksheet.write_number(row, col+2, 0)
+        value1 = max_dev/st_dev
+        worksheet.write_number(row, col+1, round(st_dev))
+        worksheet.write_number(row, col+2, round(value1))
+        coeft1 = value1/int(B)
+        worksheet.write_number(row, col+3, 1) if coeft1 <1 else worksheet.write_number(row, col+3, round(coeft1))
+
+        value2 = max_avg/avg
+        worksheet.write_number(row, col+4, round(avg))
+        worksheet.write_number(row, col+5, round(value2))
+        coeft2 = value2/int(B)
+        worksheet.write_number(row, col+6, 1) if coeft2 <1 else worksheet.write_number(row, col+6, round(coeft2))
+
+        value3 = max_daily_dev/daily_st_dev
+        worksheet.write_number(row, col+7, round(daily_st_dev))
+        worksheet.write_number(row, col+8, round(value3))
+        coeft3 = value3/int(B)
+        worksheet.write_number(row, col+9, 1) if coeft3 <1 else worksheet.write_number(row, col+9, round(coeft3))
+
+        value4 = max_deltas_avg/delta_avg
+        worksheet.write_number(row, col+10, round(delta_avg))
+        worksheet.write_number(row, col+11, round(value4))
+        coeft4 = value4/int(B)
+        worksheet.write_number(row, col+12, 1) if coeft4 <1 else worksheet.write_number(row, col+12, round(coeft4))
+
+        value5 = max_deltas_stdev/delta_stdev
+        worksheet.write_number(row, col+13, round(delta_stdev))
+        worksheet.write_number(row, col+14, round(value5))
+        coeft5 = value5/int(B)
+        worksheet.write_number(row, col+15, 1) if coeft5 <1 else worksheet.write_number(row, col+15, round(coeft5))
+
         row += 1
 
 

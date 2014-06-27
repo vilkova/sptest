@@ -21,8 +21,10 @@ CURRENT_YEAR = datetime.now().year
 def main():
     if not os.path.exists(CACHE_DIR):
         os.makedirs(CACHE_DIR)
+    margins = []
     table = retrieveTableFromExcel()
     spread1Delta = getSpreadDelta(table[1])
+    margins.append(getMarginTuple(table[1]))
     pos = spread1Delta[1][1]
     neg = spread1Delta[1][2]
     positives = spread1Delta[1][3]
@@ -31,6 +33,7 @@ def main():
         totalSpreadDelta = spread1Delta[0]
     else:
         spread2Delta = getSpreadDelta(table[2])
+        margins.append(getMarginTuple(table[2]))
         pos += spread2Delta[1][1]
         neg += spread2Delta[1][2]
         positives = positives.append(spread2Delta[1][3])
@@ -40,6 +43,7 @@ def main():
             del table[0]
         for row in table:
             spread = getSpreadDelta(row)
+            margins.append(getMarginTuple(row))
             pos += spread[1][1]
             neg += spread[1][2]
             positives = positives.append(spread[1][3])
@@ -48,7 +52,7 @@ def main():
     totalCumulativeChart = convertDeltaSeriesToCumulativeGraph(totalSpreadDelta)
     print("Total Cumulative Chart:")
     print(totalCumulativeChart.astype(int))
-    saveReports(totalCumulativeChart, pos, neg, positives, negatives)
+    saveReports(totalCumulativeChart, pos, neg, positives, negatives, margins)
     showPlot(totalCumulativeChart)
 
 def retrieveTableFromExcel():
@@ -85,14 +89,16 @@ def getSpreadDelta(row):
         years = [2000]
     else:
         years = range(int(sys.argv[2]), int(sys.argv[3]) + 1)
+
+    coeft = 0 if row[10].decode('utf-8') == '' else int(row[10].decode('utf-8'))
     spread = fetchSpread(row[0].decode("utf-8"), row[1].decode("utf-8"), row[2].decode("utf-8"),
                          int(row[5][:4].decode("utf-8")), int(row[6][:4].decode("utf-8")), int(row[3].decode("utf-8")),
                          int(row[4].decode("utf-8")), row[5].decode("utf-8"), row[6].decode("utf-8"),
-                         int(row[7].decode("utf-8")), True, years)
+                         int(row[7].decode("utf-8")), int(row[8].decode('utf-8')), coeft, True, years)
     deltaSeries = convertSpreadSeriesToDelta(spread[0])
     return (deltaSeries, spread)
 
-def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_DATE, END_DATE, BUCK_PRICE,
+def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_DATE, END_DATE, BUCK_PRICE, COMISSION, COEFT,
                 STARTFROMZERO, years):
     startdate = datetime.strptime(ST_DATE, '%Y-%m-%d %H:%M:%S')
     enddate = datetime.strptime(END_DATE, '%Y-%m-%d %H:%M:%S')
@@ -103,6 +109,7 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
     neg = 0
     positives = pd.Series()
     negatives = pd.Series()
+    spreadForStdevs = []
     for i in years:
         year = str(i)
         price = str(BUCK_PRICE)
@@ -123,7 +130,7 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
         if not checkIfCached(filename):
             data1 = q.get(cont1, authtoken=AUTH_TOKEN, trim_start=startDate, trim_end=endDate)
             data2 = q.get(cont2, authtoken=AUTH_TOKEN, trim_start=startDate, trim_end=endDate)
-            spread = (data1 - data2).Settle * BUCK_PRICE
+            spread = (data1 - data2).Settle * BUCK_PRICE * COEFT - COMISSION if COEFT != 0 else (data1 - data2).Settle * BUCK_PRICE - COMISSION
             if spread.size == 0:
                 print('!!!!!!!!!!!!*****WARNING****!!!!!!!!!!!!')
                 print('No data available for contracts %s, %s. Skiping period from %s to %s.' % (
@@ -142,17 +149,18 @@ def fetchSpread(CONTRACT, M1, M2, ST_YEAR, END_YEAR, CONT_YEAR1, CONT_YEAR2, ST_
         else:
             print("Loading cached data from file: %s !" % filename)
             cache = readCacheFromFile(filename)
-            spread = cache
+            spread = cache * COEFT if COEFT != 0 else cache
         if STARTFROMZERO:
             spreadForMeanReport = convertDeltaSeriesToCumulativeGraph(convertSpreadSeriesToDelta(spread - spread[0]))
             delta = lastValue - spread[0]
-            spread = spread + delta
+            spread = spread + delta - COMISSION
             if spreadForMeanReport[-1] >= 0:
                 pos += 1
                 positives.set_value(spreadForMeanReport.index[-1], spreadForMeanReport[-1])
             elif spreadForMeanReport[-1] < 0:
                 neg += 1
                 negatives.set_value(spreadForMeanReport.index[-1], spreadForMeanReport[-1])
+            spreadForStdevs.append(spreadForMeanReport[-1])
             totalSpread = totalSpread.append(spread)
             lastValue = totalSpread[-1]
     for i in range(0, len(totalSpread)):
@@ -201,13 +209,21 @@ def convertDeltaSeriesToCumulativeGraph(DATA):
         prev_date = date
     return GRAPHDATA
 
-def saveReports(totalCumulativeChart, pos, neg, positives, negatives):
+def getMarginTuple(row):
+
+    start = row[5].decode('utf-8')
+    end = row[6].decode('utf-8')
+    margin = int(row[9].decode('utf-8'))
+    return ((start, end, margin))
+
+
+def saveReports(totalCumulativeChart, pos, neg, positives, negatives, margins):
     result = retrieveDrawdowns(totalCumulativeChart)
     print('================')
     print('Maximum drawdowns: \n', sorted(result[1], key=lambda x: x[2])[:5], '\n')
     print('================')
     yieldArray = getYieldArray(totalCumulativeChart)
-    saveAllInFile(totalCumulativeChart, result[0], result[1], yieldArray, pos, neg, positives, negatives)
+    saveAllInFile(totalCumulativeChart, result[0], result[1], yieldArray, pos, neg, positives, negatives, margins)
 
 def retrieveDrawdowns(chart):
     res = pd.Series()
@@ -341,7 +357,7 @@ def getYearlyReport(chart):
     print('================')
     return yearlyReport
 
-def saveAllInFile(chart, drawdownArray, dd, yieldArray, pos, neg, positives, negatives):
+def saveAllInFile(chart, drawdownArray, dd, yieldArray, pos, neg, positives, negatives, margins):
     monthes = []
     for i in range(0, len(yieldArray[0][0])):
         monthes.append(yieldArray[0][0][i][1])
@@ -358,6 +374,7 @@ def saveAllInFile(chart, drawdownArray, dd, yieldArray, pos, neg, positives, neg
     worksheet9 = workbook.add_worksheet("Daily VaR report")
     worksheet10 = workbook.add_worksheet("Monthly VaR report")
     worksheet11 = workbook.add_worksheet("Normal distribution")
+    worksheet12 = workbook.add_worksheet("Margin report")
 
     worksheet1.set_column('A:B', 10)
     worksheet2.set_column('A:B', 10)
@@ -387,6 +404,7 @@ def saveAllInFile(chart, drawdownArray, dd, yieldArray, pos, neg, positives, neg
     chart9 = getVaRChart(workbook, worksheet9, yieldArray[0][2][1], 'Daily VaR report')
     chart10 = getVaRChart(workbook, worksheet10, monthes, 'Monthly VaR report')
     chart11 = getDistributionChart(workbook, worksheet11, monthes)
+    chart12 = getMarginChart(workbook, worksheet12, margins)
     worksheet1.insert_chart('C1', chart1)
     worksheet2.insert_chart('E1', chart2)
     worksheet3.insert_chart('D1', chart3[0])
@@ -402,6 +420,7 @@ def saveAllInFile(chart, drawdownArray, dd, yieldArray, pos, neg, positives, neg
     worksheet11.insert_chart('E1', chart11[0])
     worksheet11.insert_chart('L1', chart11[1])
     worksheet11.insert_chart('E27', chart11[2])
+    worksheet12.insert_chart('C1', chart12)
 
     # merge_format = workbook.add_format({'align': 'center'})
     # worksheet7.merge_range('A1:B1', 'Monthly mean', merge_format)
@@ -1178,6 +1197,39 @@ def calculateAvgInYield(dailyYield, monthlyYield, yearlyYield, w_sheet, dd):
     w_sheet.write_number(12, 7, dailyKurtosis)
     w_sheet.write_number(13, 7, monthlyKurtosis)
     w_sheet.write_number(14, 7, yearlyKurtosis)
+
+def getMarginChart(workbook, worksheet, margins):
+    result = []
+    chart = workbook.add_chart({'type': 'line'})
+    for i in range(0, len(margins)):
+        marginStart = 0
+        for j in range (1, len(margins)):
+            if margins[i][0] < margins[j][0]:
+                marginStart += margins[j][2]
+            if margins[i][1] < margins[j][1]:
+                marginEnd = marginStart - margins[j][2]
+                j += 1
+        result.append((margins[i][0], marginStart))
+        result.append((margins[i][1], marginEnd))
+
+    sortedResult = sorted(result, key=lambda x: x[0])
+
+    row = 0
+    col = 0
+    a = 0
+    for r in result:
+        worksheet.write_string(row, col, r[0][0:10])
+        worksheet.write_number(row, col+1, r[1])
+        row += 1
+        a += 1
+
+    chart.add_series({
+        'values': '=Margin report!$B$1:$B$'+str(a),
+        'categories': '=Margin report!$A$1:$A$'+str(a)
+    })
+    chart.set_size({'width': 720, 'height': 570})
+    return chart
+
 
 def showPlot(totalCumulativeChart):
     def format_date(x, pos=None):
