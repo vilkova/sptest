@@ -23,13 +23,13 @@ where <i>startyear</i> and <i>endyear</i> are optional.
 There are 4 different scripts for building and calculating various things. 
 ####sptest_multicharts.py
 Is displays total cumulative chart for each row from spreadmatrix.xlsx.
-To run the script use following command:
+To run the script use following commands:
 
     python sptest_multicharts.py spreadmatrix.xlsx 
     python sptest_multicharts.py spreadmatrix.xlsx 2000 2005
 ####sptest_eachRow.py
 Is used for calculating coeficients which are multipliers of deals in the main script. You can run this script first and than add one of the 3 coeficients to spreadmatrix.xlsx.
-To run the script use:
+To run the script use following commands:
 
     python sptest_multicharts.py spreadmatrix.xlsx 100
     python sptest_multicharts.py spreadmatrix.xlsx 1999 2013 100
@@ -37,7 +37,7 @@ where <i>100</i> is the divider for coeficients. It can be any natural number.
 The results are stored in <b>coefficients.xlsx</b>
 ####sptest_report.py
 This is the main script and it is used for calculating main values and drawing all charts.
-To run the script use:
+To run the script use following commands:
 
     python sptest_multicharts.py spreadmatrix.xlsx 100
     python sptest_multicharts.py spreadmatrix.xlsx 1999 2013 100
