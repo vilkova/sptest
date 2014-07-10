@@ -41,7 +41,6 @@ To run the script use:
 
     python sptest_multicharts.py spreadmatrix.xlsx 100
     python sptest_multicharts.py spreadmatrix.xlsx 1999 2013 100
-
 You can also run it only with one specific contract:
 
     python sptest_multicharts.py spreadmatrix.xlsx 1999 2013 ICE/B 100
