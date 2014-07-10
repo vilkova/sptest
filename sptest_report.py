@@ -12,7 +12,6 @@ import numpy as np
 import pandas as pd
 import math
 import xlsxwriter
-import inspect
 
 AUTH_TOKEN = 'e6FuWkfWH9qypKzJz6sR'
 CACHE_DIR = "cache-data/"
@@ -1225,57 +1224,24 @@ def getMarginChart(workbook, worksheet, margins, name, flag):
                 if margins[j][0] <= date <= margins[j][1]:
                     margin += margins[j][2]
             result.append((years[i], margin))
-        row = 0
-        col = 0
-        a = 0
-        for r in result:
-            date = datetime.strftime(r[0], '%Y-%m-%d')
-            worksheet.write_string(row, col, date)
-            worksheet.write_number(row, col + 1, r[1])
-            row += 1
-            a += 1
+    row = 0
+    col = 0
+    a = 0
+    for r in result:
+        date = datetime.strftime(r[0], '%Y-%m-%d')
+        worksheet.write_string(row, col, date)
+        worksheet.write_number(row, col + 1, r[1])
+        row += 1
+        a += 1
 
-        chart.add_series({
-            'values': '=' + name + '!$B$1:$B$' + str(a),
-            'categories': '=' + name + '!$A$1:$A$' + str(a)
-        })
-        chart.set_size({'width': 720, 'height': 570})
-    if flag == "profit":
-        profitYears = pd.date_range(datetime(margins[0][0].index[0].year, 1, 1),
-                                    datetime(margins[0][0].index[-1].year + 1, 1, 1))
-        for i in range(0, len(profitYears)):
-            profit = 0
-            date = datetime.strftime(profitYears[i], format)
-            for j in range(0, len(margins)):
-                spread = margins[j][0]
-                for s in range(0, len(spread)):
-                    if str(spread.index[s]) <= date <= str(spread.index[-1]):
-                        try:
-                            profit += margins[j][0][date]
-                            # print(profit)
-                            # s+=1
-                            break
-                        except KeyError:
-                            # print("error in method ", inspect.stack()[0][3])
-                            break
+    chart.add_series({
+        'values': '=' + name + '!$B$1:$B$' + str(a),
+        'categories': '=' + name + '!$A$1:$A$' + str(a)
+    })
+    chart.set_size({'width': 720, 'height': 570})
 
-            result.append((profitYears[i], profit))
 
-        row = 0
-        col = 0
-        a = 0
-        for r in result:
-            date = datetime.strftime(r[0], '%Y-%m-%d')
-            worksheet.write_string(row, col, date)
-            worksheet.write_number(row, col + 1, r[1])
-            row += 1
-            a += 1
 
-        chart.add_series({
-            'values': '=' + name + '!$B$1:$B$' + str(a),
-            'categories': '=' + name + '!$A$1:$A$' + str(a)
-        })
-        chart.set_size({'width': 720, 'height': 570})
 
     return chart
 
