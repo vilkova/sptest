@@ -34,7 +34,7 @@ To run the script use:
     python sptest_multicharts.py spreadmatrix.xlsx 100
     python sptest_multicharts.py spreadmatrix.xlsx 1999 2013 100
 where <i>100</i> is the divider for coeficients. It can be any natural number. 
-The results are stored in <b>coeficients.xlsx</b>
+The results are stored in <b>coefficients.xlsx</b>
 ####sptest_report.py
 This is the main script and it is used for calculating main values and drawing all charts.
 To run the script use:
