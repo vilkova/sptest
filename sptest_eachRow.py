@@ -220,7 +220,7 @@ def countStdev(spread):
 
 def saveStdevs(list):
 
-    workbook = xlsxwriter.Workbook('reports-2.xlsx')
+    workbook = xlsxwriter.Workbook('coefficients.xlsx')
     worksheet = workbook.add_worksheet("Coefficients")
     worksheet.set_column('A:A', 15)
     worksheet.write_string(0, 0, "Deal")

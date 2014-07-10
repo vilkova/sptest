@@ -205,7 +205,7 @@ def getMarginTuple(row):
     return ((start, end, margin))
 
 def saveReports(profits):
-    workbook = xlsxwriter.Workbook('unrealized profit.xlsx')
+    workbook = xlsxwriter.Workbook('unrealized_profit.xlsx')
     worksheet = workbook.add_worksheet("Unrealized profit")
     worksheet.set_column('A:A', 10)
     chart = getMarginChart(workbook, worksheet, profits)
